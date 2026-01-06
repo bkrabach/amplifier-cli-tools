@@ -316,10 +316,10 @@ Use Amplifier's chat interface - it's more mobile-friendly than editing code dir
 
 ### Recommended tmux Configuration
 
-The `amplifier-setup` command creates a mobile-friendly `~/.tmux.conf`:
+The `amplifier-dev setup` command creates a mobile-friendly `~/.tmux.conf`:
 
 ```bash
-amplifier-setup   # Run once on your dev box
+amplifier-dev setup   # Run once on your dev box
 ```
 
 Key features it enables:
