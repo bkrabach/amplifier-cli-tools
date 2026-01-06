@@ -143,13 +143,39 @@ Mosh uses UDP and maintains terminal state on both ends, so it can recover from 
 - Good terminal emulator with touch support
 - Free tier works well
 
-**Setup:**
+**Recommended Setup: Two Profiles**
+
+Create two host profiles in Termius for your dev box - one for local/desktop use (SSH) and one for mobile/remote use (Mosh):
+
+| Profile | Protocol | When to Use |
+|---------|----------|-------------|
+| `devbox` | SSH | Local network, stable connection, need mouse scrolling |
+| `devbox-mobile` | Mosh | Mobile, flaky WiFi, cellular, roaming |
+
+**Why two profiles?**
+
+Mosh provides excellent connection resilience but has a limitation: **mouse scrolling doesn't work in tmux** when connected via Mosh + Termius. This is a known issue with how Termius handles mouse events over Mosh connections.
+
+- **SSH profile**: Full mouse support (scrolling works in tmux)
+- **Mosh profile**: Connection resilience (survives disconnects, IP changes)
+
+**Creating the profiles:**
+
 1. Install Termius on all your devices
 2. Create an account to sync across devices
-3. Add your dev box as a host:
+3. Add your dev box twice:
+
+   **Profile 1: `devbox` (SSH)**
    - Host: `your-hostname.tailnet-name.ts.net`
-   - **Enable Mosh** in connection settings
-   - Use Tailscale SSH auth or configure SSH key
+   - Mosh: **Disabled**
+   - Use for: Desktop/laptop on stable connections
+
+   **Profile 2: `devbox-mobile` (Mosh)**
+   - Host: `your-hostname.tailnet-name.ts.net`
+   - Mosh: **Enabled**
+   - Use for: Mobile devices, unreliable networks
+
+Both connect to the same tmux session - just choose the right profile for your situation.
 
 ### Alternative Clients
 
@@ -252,12 +278,14 @@ This kills the tmux session and removes the workspace directory.
 
 **Scroll in tmux** (to see history):
 - `Ctrl+b [` enters copy mode
-- Swipe/scroll to navigate
+- Use arrow keys or Page Up/Down to navigate
 - `q` to exit copy mode
+
+> **Note**: Mouse scrolling does NOT work in tmux when connected via Mosh. This is a known limitation. Use keyboard navigation in copy mode, or connect via SSH when you need mouse scrolling.
 
 ### Termius Mobile Tips
 
-1. **Enable mosh** for your host - this is critical for mobile reliability
+1. **Use the `devbox-mobile` (Mosh) profile** for connection resilience
 2. **Use the extended keyboard bar** - Termius shows Ctrl, Alt, Esc, arrow keys
 3. **Pinch to zoom** - Adjust text size on the fly
 4. **Landscape mode** - More columns for code viewing
@@ -334,19 +362,37 @@ sudo update-locale LANG=en_US.UTF-8
    ```
 3. **Tailscale handles ports**: Within your tailnet, UDP should work. If not, check `tailscale status`.
 
-### SSH fallback when mosh won't work
+### Mouse scrolling doesn't work in tmux (Mosh)
 
-Some corporate networks block UDP entirely. Keep SSH as a fallback:
+**This is a known limitation**, not a misconfiguration. When connected via Mosh, mouse scroll events don't properly reach tmux. This affects Termius and most other terminal emulators.
 
-```bash
-# Mosh preferred (better experience)
-mosh your-devbox
+**Workarounds:**
 
-# SSH fallback (always works over Tailscale)
-ssh your-devbox
-```
+1. **Use SSH when you need mouse scrolling** - Connect with your SSH profile instead of Mosh
+2. **Keyboard navigation in copy mode**:
+   ```
+   Ctrl+b [        # Enter copy mode
+   Arrow keys      # Navigate line by line
+   Page Up/Down    # Navigate by page
+   Ctrl+u/Ctrl+d   # Half-page up/down
+   g / G           # Jump to top/bottom
+   q               # Exit copy mode
+   ```
+3. **Termius Gesture Mode** (mobile): Tap the finger icon on the keyboard toolbar, then swipe for arrow key emulation
 
-Both get you to the same tmux session - you just lose mosh's resilience benefits.
+**Recommendation**: Use the dual-profile approach - SSH profile for desktop/mouse work, Mosh profile for mobile/unreliable networks.
+
+### SSH vs Mosh: When to use which
+
+| Situation | Use | Why |
+|-----------|-----|-----|
+| Desktop, stable network | SSH | Full mouse support |
+| Mobile device | Mosh | Survives disconnects |
+| Flaky WiFi / cellular | Mosh | Connection resilience |
+| Heavy scrolling/mouse work | SSH | Mouse events work |
+| Laptop that sleeps frequently | Mosh | Resumes after wake |
+
+Both protocols connect to the same tmux session - you can switch between them freely.
 
 ### "Connection refused" when connecting
 
@@ -388,15 +434,16 @@ amplifier-dev ~/work/my-task
 
 **Morning (laptop at home):**
 ```bash
-mosh devbox
+# Use SSH profile - stable connection, mouse scrolling works
+ssh devbox
 amplifier-dev ~/work/new-feature -p "Let's implement the caching layer"
-# Work for a couple hours, make progress
+# Work for a couple hours, scroll through code, make progress
 Ctrl+b d    # Detach, head out
 ```
 
 **Commute (phone on cellular):**
 ```bash
-# Tap saved host in Termius (mosh-enabled)
+# Tap devbox-mobile in Termius (Mosh profile)
 amplifier-dev ~/work/new-feature
 # Check Amplifier's progress, review suggestions
 # Approve a commit, push to branch
@@ -405,7 +452,7 @@ amplifier-dev ~/work/new-feature
 
 **Afternoon (tablet at cafe, flaky WiFi):**
 ```bash
-# Termius reconnects via mosh - no lost keystrokes
+# Use Mosh profile - connection survives WiFi drops
 amplifier-dev ~/work/new-feature
 # Continue the conversation, refine implementation
 # Create PR when ready
@@ -413,13 +460,14 @@ amplifier-dev ~/work/new-feature
 
 **Evening (desktop at home):**
 ```bash
-mosh devbox
+# Back to SSH profile for mouse scrolling comfort
+ssh devbox
 amplifier-dev ~/work/new-feature
-# Final review, address PR feedback
+# Final review, address PR feedback, scroll through diffs
 amplifier-dev --destroy ~/work/new-feature   # Task complete!
 ```
 
-One continuous session, four devices, zero context loss.
+One continuous session, four devices, zero context loss. Use SSH when you can, Mosh when you need resilience.
 
 ## Summary: The Full Stack
 
