@@ -10,8 +10,19 @@ import shlex
 import tempfile
 from pathlib import Path
 
+import subprocess
+
 from .config import WindowConfig
 from .shell import command_exists, run, try_install_tool
+
+
+def _run_tmux(*args: str) -> None:
+    """Run tmux command with arguments directly (no shell parsing).
+    
+    This avoids quote mangling that happens with shell=True.
+    Matches the behavior of the bash script's direct tmux invocation.
+    """
+    subprocess.run(["tmux", *args], check=True)
 
 __all__ = [
     "session_exists",
@@ -82,16 +93,13 @@ def create_session(
     main_rcfile = _create_main_rcfile(rcfile_dir, workdir, main_command, prompt)
 
     # Create the session with main window
-    quoted_name = shlex.quote(name)
-    quoted_workdir = shlex.quote(str(workdir))
-    quoted_main_window = shlex.quote(main_window_name)
-
-    # Use 'exec bash' to replace the shell process, preventing extra shell layers
-    # that could receive terminal capability query responses before our flush logic runs.
-    # Use double quotes outside, single quotes for path inside (matching bash script pattern)
-    run(
-        f"tmux new-session -d -s {quoted_name} -n {quoted_main_window} "
-        f'''-c {quoted_workdir} "exec bash --rcfile '{main_rcfile}'"'''
+    # Match bash script exactly: NO -c flag (cd is in rcfile), pass shell-command as single arg
+    # Using _run_tmux() avoids shell parsing that mangles quotes
+    _run_tmux(
+        "new-session", "-d",
+        "-s", name,
+        "-n", main_window_name,
+        f"exec bash --rcfile '{main_rcfile}'"
     )
 
     # Create additional windows
@@ -99,7 +107,7 @@ def create_session(
         _create_window(name, window_config, workdir, rcfile_dir)
 
     # Select the main window so we attach to it
-    run(f"tmux select-window -t {quoted_name}:{quoted_main_window}")
+    _run_tmux("select-window", "-t", f"{name}:{main_window_name}")
 
 
 def select_window(session: str, window: str) -> None:
@@ -109,7 +117,10 @@ def select_window(session: str, window: str) -> None:
         session: Session name.
         window: Window name to select.
     """
-    run(f"tmux select-window -t {shlex.quote(session)}:{shlex.quote(window)}", check=False)
+    try:
+        _run_tmux("select-window", "-t", f"{session}:{window}")
+    except subprocess.CalledProcessError:
+        pass  # Ignore if window doesn't exist
 
 
 def attach_session(name: str) -> None:
@@ -203,25 +214,23 @@ def _create_window(
         workdir: Working directory.
         rcfile_dir: Directory for rcfiles.
     """
-    quoted_session = shlex.quote(session)
-    quoted_window = shlex.quote(config.name)
-    quoted_workdir = shlex.quote(str(workdir))
 
     # Special handling for "shell" window - create with 2 horizontal panes
     if config.name == "shell":
         shell_rcfile = _create_shell_rcfile(rcfile_dir, workdir)
-        quoted_rcfile = shlex.quote(str(shell_rcfile))
 
-        # Create window with first pane (use exec to replace shell process)
-        # Use double quotes outside, single quotes for path inside (matching bash script pattern)
-        run(
-            f"tmux new-window -t {quoted_session} -n {quoted_window} "
-            f'''-c {quoted_workdir} "exec bash --rcfile '{shell_rcfile}'"'''
+        # Match bash script: NO -c flag, pass shell-command as single arg
+        _run_tmux(
+            "new-window",
+            "-t", session,
+            "-n", config.name,
+            f"exec bash --rcfile '{shell_rcfile}'"
         )
         # Split horizontally for second pane
-        run(
-            f"tmux split-window -h -t {quoted_session}:{quoted_window} "
-            f'''-c {quoted_workdir} "exec bash --rcfile '{shell_rcfile}'"'''
+        _run_tmux(
+            "split-window", "-h",
+            "-t", f"{session}:{config.name}",
+            f"exec bash --rcfile '{shell_rcfile}'"
         )
         return
 
@@ -236,9 +245,21 @@ def _create_window(
             return
 
     # Tool exists or no tool needed - create window with command
-    run(
-        f"tmux new-window -t {quoted_session} -n {quoted_window} "
-        f"-c {quoted_workdir} {shlex.quote(config.command)}"
+    # Create rcfile for this command window (like bash script does)
+    cmd_rcfile = rcfile_dir / f"{config.name}_rcfile.sh"
+    cmd_rcfile_content = f"""\
+source ~/.bashrc 2>/dev/null
+cd {shlex.quote(str(workdir))}
+{config.command}
+"""
+    cmd_rcfile.write_text(cmd_rcfile_content)
+    cmd_rcfile.chmod(0o755)
+    
+    _run_tmux(
+        "new-window",
+        "-t", session,
+        "-n", config.name,
+        f"exec bash --rcfile '{cmd_rcfile}'"
     )
 
 
@@ -256,20 +277,16 @@ def _create_missing_tool_window(
         tool_name: Name of the missing tool.
         workdir: Working directory.
     """
-    quoted_session = shlex.quote(session)
-    quoted_window = shlex.quote(window_name)
-    quoted_workdir = shlex.quote(str(workdir))
-
     # Get install instructions based on tool
     install_cmd = _get_install_instruction(tool_name)
-
     message = f"Tool '{tool_name}' not found. Install with: {install_cmd}"
-    quoted_message = shlex.quote(message)
 
-    # Create window that displays the message
-    run(
-        f"tmux new-window -t {quoted_session} -n {quoted_window} "
-        f"-c {quoted_workdir} bash -c 'echo {quoted_message}; exec bash'"
+    # Create window that displays the message then drops to shell
+    _run_tmux(
+        "new-window",
+        "-t", session,
+        "-n", window_name,
+        f"bash -c 'cd {shlex.quote(str(workdir))}; echo {shlex.quote(message)}; exec bash'"
     )
 
 
