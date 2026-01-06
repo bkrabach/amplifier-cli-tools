@@ -123,6 +123,30 @@ def select_window(session: str, window: str) -> None:
         pass  # Ignore if window doesn't exist
 
 
+def _flush_terminal_input() -> None:
+    """Flush any pending terminal input (WezTerm capability query responses).
+    
+    WezTerm sends DA1, DA2, XTVERSION queries when terminal context changes.
+    These can appear as garbage characters if not flushed before attach.
+    """
+    import sys
+    import select
+    import time
+    
+    # Give WezTerm time to send its queries
+    time.sleep(0.3)
+    
+    # Flush stdin if there's pending input
+    try:
+        # Check if stdin has pending data (non-blocking)
+        if sys.stdin.isatty():
+            while select.select([sys.stdin], [], [], 0.1)[0]:
+                # Read and discard pending input
+                os.read(sys.stdin.fileno(), 10000)
+    except (OSError, IOError):
+        pass  # Ignore errors (not a tty, etc.)
+
+
 def attach_session(name: str) -> None:
     """Attach to tmux session.
 
@@ -133,7 +157,8 @@ def attach_session(name: str) -> None:
     Args:
         name: Session name to attach to.
     """
-    quoted_name = shlex.quote(name)
+    # Flush any pending terminal input (WezTerm queries) before attaching
+    _flush_terminal_input()
 
     if os.environ.get("TMUX"):
         # Inside tmux - switch to session
