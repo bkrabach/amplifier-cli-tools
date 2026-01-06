@@ -186,6 +186,16 @@ def main_dev() -> int:
     Returns:
         Exit code (0 success, 1 error, 130 keyboard interrupt)
     """
+    # Check if first arg is a subcommand
+    if len(sys.argv) > 1 and sys.argv[1] in ("setup", "config"):
+        return _main_dev_subcommands()
+
+    # Default: workspace mode
+    return _main_dev_workspace()
+
+
+def _main_dev_subcommands() -> int:
+    """Handle setup and config subcommands."""
     parser = argparse.ArgumentParser(
         prog="amplifier-dev",
         description="Amplifier development workspace manager.",
@@ -219,25 +229,17 @@ def main_dev() -> int:
         help="View and modify configuration",
     )
     config_subparsers = config_parser.add_subparsers(dest="config_command", help="Config commands")
-    
+
     config_subparsers.add_parser("show", help="Show current configuration")
     config_subparsers.add_parser("tmux-on", help="Enable tmux mode")
     config_subparsers.add_parser("tmux-off", help="Disable tmux mode (run amplifier directly)")
-    
+
     get_parser = config_subparsers.add_parser("get", help="Get a configuration value")
     get_parser.add_argument("key", help="Setting key (e.g., dev.use_tmux)")
-    
+
     set_parser = config_subparsers.add_parser("set", help="Set a configuration value")
     set_parser.add_argument("key", help="Setting key (e.g., dev.use_tmux)")
     set_parser.add_argument("value", help="Value to set")
-
-    # Default run behavior - parse remaining args for workspace creation
-    # We need to handle the case where no subcommand is given
-    
-    # Check if first arg looks like a subcommand or a path
-    if len(sys.argv) > 1 and sys.argv[1] not in ("setup", "config", "-h", "--help"):
-        # Treat as workspace command - reparse with workspace args
-        return _main_dev_workspace()
 
     args = parser.parse_args()
 
@@ -254,13 +256,27 @@ def _main_dev_workspace() -> int:
     """Handle the default workspace creation command."""
     parser = argparse.ArgumentParser(
         prog="amplifier-dev",
-        description="Create and launch an Amplifier development workspace.",
+        description="Amplifier development workspace manager.",
+        epilog="""
+Subcommands:
+  setup              First-time setup: install dependencies and create configs
+  config             View and modify configuration
+
+Examples:
+  amplifier-dev ~/myproject          Create/attach to workspace
+  amplifier-dev -d ~/myproject       Destroy workspace (with confirmation)
+  amplifier-dev --no-tmux ~/myproject  Run without tmux
+  amplifier-dev setup                First-time setup
+  amplifier-dev config show          Show configuration
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "workdir",
         metavar="WORKDIR",
         type=Path,
-        help="Directory for workspace",
+        nargs="?",
+        help="Directory for workspace (required for create/destroy)",
     )
     parser.add_argument(
         "-d", "--destroy",
@@ -300,6 +316,12 @@ def _main_dev_workspace() -> int:
     )
 
     args = parser.parse_args()
+
+    # If no workdir provided, show help
+    if args.workdir is None:
+        parser.print_help()
+        return 0
+
     return _cmd_run(args)
 
 
