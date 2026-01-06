@@ -87,9 +87,11 @@ def create_session(
     quoted_main_window = shlex.quote(main_window_name)
     quoted_rcfile = shlex.quote(str(main_rcfile))
 
+    # Use 'exec bash' to replace the shell process, preventing extra shell layers
+    # that could receive terminal capability query responses before our flush logic runs
     run(
         f"tmux new-session -d -s {quoted_name} -n {quoted_main_window} "
-        f"-c {quoted_workdir} bash --rcfile {quoted_rcfile}"
+        f"-c {quoted_workdir} 'exec bash --rcfile {quoted_rcfile}'"
     )
 
     # Create additional windows
@@ -149,15 +151,17 @@ def _create_main_rcfile(
     """
     rcfile = rcfile_dir / "main_rcfile.sh"
 
-    # Use printf %q for robust shell escaping of special characters in prompt
-    # printf %q outputs shell-quoted string that survives eval/expansion
+    # shlex.quote() handles shell escaping - no need for extra $(printf '%s' ...) wrapper
+    # which adds unnecessary subshell overhead and potential timing issues
     escaped_prompt = shlex.quote(prompt)
     rcfile_content = f"""\
 source ~/.bashrc 2>/dev/null
 cd {shlex.quote(str(workdir))}
+# Wait for terminal capability queries to settle, then flush any pending input
+# This prevents WezTerm/tmux escape sequences from appearing in the command's input
 sleep 0.3
 read -t 0.1 -n 10000 discard 2>/dev/null || true
-{main_command} "$(printf '%s' {escaped_prompt})"
+{main_command} {escaped_prompt}
 """
     rcfile.write_text(rcfile_content)
     rcfile.chmod(0o755)
@@ -207,15 +211,15 @@ def _create_window(
         shell_rcfile = _create_shell_rcfile(rcfile_dir, workdir)
         quoted_rcfile = shlex.quote(str(shell_rcfile))
 
-        # Create window with first pane
+        # Create window with first pane (use exec to replace shell process)
         run(
             f"tmux new-window -t {quoted_session} -n {quoted_window} "
-            f"-c {quoted_workdir} bash --rcfile {quoted_rcfile}"
+            f"-c {quoted_workdir} 'exec bash --rcfile {quoted_rcfile}'"
         )
         # Split horizontally for second pane
         run(
             f"tmux split-window -h -t {quoted_session}:{quoted_window} "
-            f"-c {quoted_workdir} bash --rcfile {quoted_rcfile}"
+            f"-c {quoted_workdir} 'exec bash --rcfile {quoted_rcfile}'"
         )
         return
 

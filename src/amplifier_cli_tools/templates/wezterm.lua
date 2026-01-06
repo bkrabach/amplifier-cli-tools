@@ -65,4 +65,12 @@ end
 config.front_end = "WebGpu"
 config.max_fps = 120
 
+-- Terminal capability query settings
+-- These can help reduce escape sequences sent on terminal startup that may
+-- interfere with applications if they arrive before the shell is ready.
+-- The rcfile-based flush logic in amplifier-cli-tools handles this, but
+-- disabling unnecessary features can reduce the window for race conditions.
+config.enable_kitty_keyboard = false
+config.enable_csi_u_key_encoding = false
+
 return config
