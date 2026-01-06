@@ -12,16 +12,17 @@ uv tool install git+https://github.com/bkrabach/amplifier-cli-tools
 
 ## First-Time Setup
 
-Run the setup command to install dependencies and configure tmux:
+Run the setup subcommand to install dependencies and configure tmux:
 
 ```bash
-amplifier-setup
+amplifier-dev setup
 ```
 
 This will:
 - Check for and install required tools (git, tmux)
 - Check for and install optional tools (mosh, lazygit, mc)
 - Create a minimal `~/.tmux.conf` if you don't have one (with mouse support, keybindings, etc.)
+- Create a `~/.wezterm.lua` if WezTerm is installed but not configured
 
 **Options:**
 - `-y, --yes` - Non-interactive mode (auto-accept all prompts)
@@ -32,20 +33,22 @@ This will:
 
 ### amplifier-dev
 
-Create and launch an Amplifier development workspace with tmux.
+Amplifier development workspace manager with subcommands.
+
+#### Create/Attach Workspace (default)
 
 ```bash
 # Create workspace and launch tmux session
 amplifier-dev ~/work/my-feature
 
-# Setup workspace only (no tmux)
+# Run amplifier directly without tmux
 amplifier-dev --no-tmux ~/work/my-feature
 
 # With a starting prompt for amplifier
 amplifier-dev -p "Let's work on the auth module" ~/work/auth-work
 
 # Destroy workspace when done
-amplifier-dev --destroy ~/work/my-feature
+amplifier-dev -d ~/work/my-feature
 ```
 
 **Options:**
@@ -65,6 +68,40 @@ amplifier-dev --destroy ~/work/my-feature
   - `shell` - Two shell panes
   - `git` - lazygit
   - `files` - mc (midnight commander)
+
+#### Setup Subcommand
+
+First-time setup for dependencies and configuration:
+
+```bash
+amplifier-dev setup           # Interactive setup
+amplifier-dev setup -y        # Non-interactive (auto-accept)
+amplifier-dev setup --skip-tools   # Skip tool installation
+```
+
+#### Config Subcommand
+
+View and modify configuration settings:
+
+```bash
+# Show current configuration
+amplifier-dev config show
+
+# Toggle tmux mode (quick shortcuts)
+amplifier-dev config tmux-off   # Run amplifier directly without tmux
+amplifier-dev config tmux-on    # Use tmux (default)
+
+# Get/set specific settings
+amplifier-dev config get dev.use_tmux
+amplifier-dev config set dev.use_tmux false
+```
+
+**Config subcommands:**
+- `show` - Display current configuration (default)
+- `tmux-on` - Enable tmux mode
+- `tmux-off` - Disable tmux mode (run amplifier directly)
+- `get KEY` - Get a setting value (e.g., `dev.use_tmux`)
+- `set KEY VALUE` - Set a setting value
 
 ### amplifier-reset
 
@@ -89,30 +126,6 @@ amplifier-reset -y
 - `-y, --yes` - Skip confirmation prompt
 - `--no-install` - Uninstall only, don't reinstall
 - `--no-launch` - Don't launch amplifier after install
-
-### amplifier-config
-
-View and modify configuration settings.
-
-```bash
-# Show current configuration
-amplifier-config show
-
-# Toggle tmux mode (quick shortcuts)
-amplifier-config tmux-off   # Run amplifier directly without tmux
-amplifier-config tmux-on    # Use tmux (default)
-
-# Get/set specific settings
-amplifier-config get dev.use_tmux
-amplifier-config set dev.use_tmux false
-```
-
-**Subcommands:**
-- `show` - Display current configuration (default)
-- `tmux-on` - Enable tmux mode
-- `tmux-off` - Disable tmux mode (run amplifier directly)
-- `get KEY` - Get a setting value (e.g., `dev.use_tmux`)
-- `set KEY VALUE` - Set a setting value
 
 ## Configuration
 
@@ -160,9 +173,9 @@ preserve = ["projects"]
 - git
 - tmux
 
-Run `amplifier-setup` to automatically install missing tools.
+Run `amplifier-dev setup` to automatically install missing tools.
 
-**Optional tools (installed by `amplifier-setup`):**
+**Optional tools (installed by `amplifier-dev setup`):**
 - mosh - for resilient remote connections (recommended for mobile/remote dev)
 - lazygit - for git window
 - mc (midnight commander) - for files window
@@ -174,7 +187,7 @@ Works on:
 - **macOS** with Terminal.app, iTerm2, or any terminal
 - **Linux** with any terminal
 
-The `amplifier-setup` command handles platform-specific installation:
+The `amplifier-dev setup` command handles platform-specific installation:
 - macOS: Uses Homebrew
 - Linux: Uses apt/dnf, or GitHub releases for lazygit
 

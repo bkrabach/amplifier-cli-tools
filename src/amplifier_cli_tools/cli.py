@@ -8,10 +8,8 @@ All business logic is in dev.py, reset.py, and setup.py - this module only handl
 
 Entry Points
 ------------
-- main_dev(): amplifier-dev command
+- main_dev(): amplifier-dev command (with setup/config subcommands)
 - main_reset(): amplifier-reset command
-- main_setup(): amplifier-setup command
-- main_config(): amplifier-config command
 """
 
 import argparse
@@ -40,67 +38,8 @@ def _confirm(message: str) -> bool:
         return False
 
 
-def main_dev() -> int:
-    """Entry point for amplifier-dev command.
-
-    Creates and launches an Amplifier development workspace with tmux.
-
-    Returns:
-        Exit code (0 success, 1 error, 130 keyboard interrupt)
-    """
-    parser = argparse.ArgumentParser(
-        prog="amplifier-dev",
-        description="Create and launch an Amplifier development workspace.",
-    )
-    parser.add_argument(
-        "workdir",
-        metavar="WORKDIR",
-        type=Path,
-        help="Directory for workspace",
-    )
-    parser.add_argument(
-        "-d",
-        "--destroy",
-        action="store_true",
-        help="Destroy session and delete workspace (with confirmation)",
-    )
-    parser.add_argument(
-        "-p",
-        "--prompt",
-        metavar="TEXT",
-        help="Override default prompt",
-    )
-    parser.add_argument(
-        "-e",
-        "--extra",
-        metavar="TEXT",
-        help="Append to prompt",
-    )
-    parser.add_argument(
-        "-c",
-        "--config",
-        metavar="FILE",
-        type=Path,
-        help="Use specific config file",
-    )
-    # Tmux mode options (mutually exclusive)
-    tmux_group = parser.add_mutually_exclusive_group()
-    tmux_group.add_argument(
-        "--tmux",
-        action="store_true",
-        dest="use_tmux",
-        default=None,
-        help="Use tmux (override config)",
-    )
-    tmux_group.add_argument(
-        "--no-tmux",
-        action="store_false",
-        dest="use_tmux",
-        help="Run amplifier directly without tmux (override config)",
-    )
-
-    args = parser.parse_args()
-
+def _cmd_run(args: argparse.Namespace) -> int:
+    """Handle the default run command (create/attach workspace)."""
     try:
         config = load_config(args.config)
         workdir = args.workdir.resolve()
@@ -145,6 +84,225 @@ def main_dev() -> int:
         return 1
 
 
+def _cmd_setup(args: argparse.Namespace) -> int:
+    """Handle the setup subcommand."""
+    from . import setup
+
+    try:
+        success = setup.run_setup(
+            interactive=not args.yes,
+            skip_tools=args.skip_tools,
+            skip_tmux=args.skip_tmux,
+        )
+        return 0 if success else 1
+
+    except KeyboardInterrupt:
+        print("\nAborted.")
+        return 130
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def _cmd_config(args: argparse.Namespace) -> int:
+    """Handle the config subcommand."""
+    from . import config_manager
+
+    try:
+        if args.config_command is None or args.config_command == "show":
+            print(config_manager.show_config())
+            return 0
+
+        elif args.config_command == "get":
+            parts = args.key.split(".", 1)
+            if len(parts) != 2:
+                print("Error: Key must be in format 'section.key' (e.g., dev.use_tmux)")
+                return 1
+            section, key = parts
+            value = config_manager.get_setting(section, key)
+            if value is None:
+                print(f"{args.key}: (not set)")
+            else:
+                print(f"{args.key} = {value}")
+            return 0
+
+        elif args.config_command == "set":
+            parts = args.key.split(".", 1)
+            if len(parts) != 2:
+                print("Error: Key must be in format 'section.key' (e.g., dev.use_tmux)")
+                return 1
+            section, key = parts
+
+            # Parse value
+            value_str = args.value.lower()
+            if value_str in ("true", "yes", "on", "1"):
+                value = True
+            elif value_str in ("false", "no", "off", "0"):
+                value = False
+            else:
+                # Try as number, else string
+                try:
+                    value = int(args.value)
+                except ValueError:
+                    try:
+                        value = float(args.value)
+                    except ValueError:
+                        value = args.value
+
+            config_manager.set_setting(section, key, value)
+            print(f"Set {args.key} = {value}")
+            print(f"Config saved to: {config_manager.get_config_path()}")
+            return 0
+
+        elif args.config_command == "tmux-on":
+            config_manager.set_setting("dev", "use_tmux", True)
+            print("Enabled tmux mode (dev.use_tmux = true)")
+            print(f"Config saved to: {config_manager.get_config_path()}")
+            return 0
+
+        elif args.config_command == "tmux-off":
+            config_manager.set_setting("dev", "use_tmux", False)
+            print("Disabled tmux mode (dev.use_tmux = false)")
+            print("amplifier-dev will now run amplifier directly without tmux")
+            print(f"Config saved to: {config_manager.get_config_path()}")
+            return 0
+
+        else:
+            return 1
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def main_dev() -> int:
+    """Entry point for amplifier-dev command.
+
+    Supports subcommands:
+    - (default): Create and launch workspace
+    - setup: First-time setup
+    - config: View/modify configuration
+
+    Returns:
+        Exit code (0 success, 1 error, 130 keyboard interrupt)
+    """
+    parser = argparse.ArgumentParser(
+        prog="amplifier-dev",
+        description="Amplifier development workspace manager.",
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
+
+    # Setup subcommand
+    setup_parser = subparsers.add_parser(
+        "setup",
+        help="First-time setup: install dependencies and create configs",
+    )
+    setup_parser.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="Non-interactive mode (auto-accept all prompts)",
+    )
+    setup_parser.add_argument(
+        "--skip-tools",
+        action="store_true",
+        help="Skip tool installation",
+    )
+    setup_parser.add_argument(
+        "--skip-tmux",
+        action="store_true",
+        help="Skip tmux.conf creation",
+    )
+
+    # Config subcommand
+    config_parser = subparsers.add_parser(
+        "config",
+        help="View and modify configuration",
+    )
+    config_subparsers = config_parser.add_subparsers(dest="config_command", help="Config commands")
+    
+    config_subparsers.add_parser("show", help="Show current configuration")
+    config_subparsers.add_parser("tmux-on", help="Enable tmux mode")
+    config_subparsers.add_parser("tmux-off", help="Disable tmux mode (run amplifier directly)")
+    
+    get_parser = config_subparsers.add_parser("get", help="Get a configuration value")
+    get_parser.add_argument("key", help="Setting key (e.g., dev.use_tmux)")
+    
+    set_parser = config_subparsers.add_parser("set", help="Set a configuration value")
+    set_parser.add_argument("key", help="Setting key (e.g., dev.use_tmux)")
+    set_parser.add_argument("value", help="Value to set")
+
+    # Default run behavior - parse remaining args for workspace creation
+    # We need to handle the case where no subcommand is given
+    
+    # Check if first arg looks like a subcommand or a path
+    if len(sys.argv) > 1 and sys.argv[1] not in ("setup", "config", "-h", "--help"):
+        # Treat as workspace command - reparse with workspace args
+        return _main_dev_workspace()
+
+    args = parser.parse_args()
+
+    if args.command == "setup":
+        return _cmd_setup(args)
+    elif args.command == "config":
+        return _cmd_config(args)
+    else:
+        parser.print_help()
+        return 0
+
+
+def _main_dev_workspace() -> int:
+    """Handle the default workspace creation command."""
+    parser = argparse.ArgumentParser(
+        prog="amplifier-dev",
+        description="Create and launch an Amplifier development workspace.",
+    )
+    parser.add_argument(
+        "workdir",
+        metavar="WORKDIR",
+        type=Path,
+        help="Directory for workspace",
+    )
+    parser.add_argument(
+        "-d", "--destroy",
+        action="store_true",
+        help="Destroy session and delete workspace (with confirmation)",
+    )
+    parser.add_argument(
+        "-p", "--prompt",
+        metavar="TEXT",
+        help="Override default prompt",
+    )
+    parser.add_argument(
+        "-e", "--extra",
+        metavar="TEXT",
+        help="Append to prompt",
+    )
+    parser.add_argument(
+        "-c", "--config",
+        metavar="FILE",
+        type=Path,
+        help="Use specific config file",
+    )
+    # Tmux mode options (mutually exclusive)
+    tmux_group = parser.add_mutually_exclusive_group()
+    tmux_group.add_argument(
+        "--tmux",
+        action="store_true",
+        dest="use_tmux",
+        default=None,
+        help="Use tmux (override config)",
+    )
+    tmux_group.add_argument(
+        "--no-tmux",
+        action="store_false",
+        dest="use_tmux",
+        help="Run amplifier directly without tmux (override config)",
+    )
+
+    args = parser.parse_args()
+    return _cmd_run(args)
+
+
 def main_reset() -> int:
     """Entry point for amplifier-reset command.
 
@@ -158,14 +316,12 @@ def main_reset() -> int:
         description="Reset Amplifier installation.",
     )
     parser.add_argument(
-        "-a",
-        "--all",
+        "-a", "--all",
         action="store_true",
         help="Remove entire ~/.amplifier including preserved dirs",
     )
     parser.add_argument(
-        "-y",
-        "--yes",
+        "-y", "--yes",
         action="store_true",
         help="Skip confirmation prompt",
     )
@@ -213,157 +369,6 @@ def main_reset() -> int:
     except KeyboardInterrupt:
         print("\nAborted.")
         return 130
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-
-def main_setup() -> int:
-    """Entry point for amplifier-setup command.
-
-    Runs first-time setup: installs dependencies and creates tmux config.
-
-    Returns:
-        Exit code (0 success, 1 error, 130 keyboard interrupt)
-    """
-    from . import setup
-
-    parser = argparse.ArgumentParser(
-        prog="amplifier-setup",
-        description="First-time setup for amplifier-cli-tools. Installs dependencies and creates config.",
-    )
-    parser.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Non-interactive mode (auto-accept all prompts)",
-    )
-    parser.add_argument(
-        "--skip-tools",
-        action="store_true",
-        help="Skip tool installation",
-    )
-    parser.add_argument(
-        "--skip-tmux",
-        action="store_true",
-        help="Skip tmux.conf creation",
-    )
-
-    args = parser.parse_args()
-
-    try:
-        success = setup.run_setup(
-            interactive=not args.yes,
-            skip_tools=args.skip_tools,
-            skip_tmux=args.skip_tmux,
-        )
-        return 0 if success else 1
-
-    except KeyboardInterrupt:
-        print("\nAborted.")
-        return 130
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-
-def main_config() -> int:
-    """Entry point for amplifier-config command.
-
-    View and modify amplifier-cli-tools configuration.
-
-    Returns:
-        Exit code (0 success, 1 error)
-    """
-    from . import config_manager
-
-    parser = argparse.ArgumentParser(
-        prog="amplifier-config",
-        description="View and modify amplifier-cli-tools configuration.",
-    )
-    subparsers = parser.add_subparsers(dest="command", help="Commands")
-
-    # Show command
-    subparsers.add_parser("show", help="Show current configuration")
-
-    # Set command
-    set_parser = subparsers.add_parser("set", help="Set a configuration value")
-    set_parser.add_argument("key", help="Setting key (e.g., dev.use_tmux)")
-    set_parser.add_argument("value", help="Value to set")
-
-    # Get command
-    get_parser = subparsers.add_parser("get", help="Get a configuration value")
-    get_parser.add_argument("key", help="Setting key (e.g., dev.use_tmux)")
-
-    # Convenience toggles
-    subparsers.add_parser("tmux-on", help="Enable tmux mode (shortcut for 'set dev.use_tmux true')")
-    subparsers.add_parser("tmux-off", help="Disable tmux mode (shortcut for 'set dev.use_tmux false')")
-
-    args = parser.parse_args()
-
-    try:
-        if args.command is None or args.command == "show":
-            print(config_manager.show_config())
-            return 0
-
-        elif args.command == "get":
-            parts = args.key.split(".", 1)
-            if len(parts) != 2:
-                print("Error: Key must be in format 'section.key' (e.g., dev.use_tmux)")
-                return 1
-            section, key = parts
-            value = config_manager.get_setting(section, key)
-            if value is None:
-                print(f"{args.key}: (not set)")
-            else:
-                print(f"{args.key} = {value}")
-            return 0
-
-        elif args.command == "set":
-            parts = args.key.split(".", 1)
-            if len(parts) != 2:
-                print("Error: Key must be in format 'section.key' (e.g., dev.use_tmux)")
-                return 1
-            section, key = parts
-
-            # Parse value
-            value_str = args.value.lower()
-            if value_str in ("true", "yes", "on", "1"):
-                value = True
-            elif value_str in ("false", "no", "off", "0"):
-                value = False
-            else:
-                # Try as number, else string
-                try:
-                    value = int(args.value)
-                except ValueError:
-                    try:
-                        value = float(args.value)
-                    except ValueError:
-                        value = args.value
-
-            config_manager.set_setting(section, key, value)
-            print(f"Set {args.key} = {value}")
-            print(f"Config saved to: {config_manager.get_config_path()}")
-            return 0
-
-        elif args.command == "tmux-on":
-            config_manager.set_setting("dev", "use_tmux", True)
-            print("Enabled tmux mode (dev.use_tmux = true)")
-            print(f"Config saved to: {config_manager.get_config_path()}")
-            return 0
-
-        elif args.command == "tmux-off":
-            config_manager.set_setting("dev", "use_tmux", False)
-            print("Disabled tmux mode (dev.use_tmux = false)")
-            print("amplifier-dev will now run amplifier directly without tmux")
-            print(f"Config saved to: {config_manager.get_config_path()}")
-            return 0
-
-        else:
-            parser.print_help()
-            return 1
-
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

@@ -26,8 +26,6 @@ dependencies = []  # Zero runtime dependencies - stdlib only
 [project.scripts]
 amplifier-dev = "amplifier_cli_tools.cli:main_dev"
 amplifier-reset = "amplifier_cli_tools.cli:main_reset"
-amplifier-setup = "amplifier_cli_tools.cli:main_setup"
-amplifier-config = "amplifier_cli_tools.cli:main_config"
 
 [project.urls]
 Repository = "https://github.com/bkrabach/amplifier-cli-tools"
