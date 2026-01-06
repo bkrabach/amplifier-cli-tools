@@ -47,6 +47,21 @@ def _cmd_run(args: argparse.Namespace) -> int:
         # Determine tmux mode: CLI flag overrides config
         use_tmux = args.use_tmux if args.use_tmux is not None else config.dev.use_tmux
 
+        # Handle --kill or --fresh: kill session only, don't delete files
+        # --fresh implies --kill but continues to create new session
+        if args.kill or args.fresh:
+            session_name = dev.get_session_name(workdir)
+            if tmux.session_exists(session_name):
+                print(f"Killing tmux session: {session_name}")
+                tmux.kill_session(session_name)
+                print("Session killed.")
+            else:
+                print(f"No session '{session_name}' to kill.")
+            
+            # If --fresh, continue to create new session; otherwise exit
+            if not args.fresh:
+                return 0
+
         if args.destroy:
             # Derive session name from workdir
             session_name = dev.get_session_name(workdir)
@@ -263,11 +278,13 @@ Subcommands:
   config             View and modify configuration
 
 Examples:
-  amplifier-dev ~/myproject          Create/attach to workspace
-  amplifier-dev -d ~/myproject       Destroy workspace (with confirmation)
+  amplifier-dev ~/myproject            Create/attach to workspace
+  amplifier-dev -k ~/myproject         Kill session (keep files)
+  amplifier-dev -f ~/myproject         Kill session and start fresh
+  amplifier-dev -d ~/myproject         Destroy workspace (with confirmation)
   amplifier-dev --no-tmux ~/myproject  Run without tmux
-  amplifier-dev setup                First-time setup
-  amplifier-dev config show          Show configuration
+  amplifier-dev setup                  First-time setup
+  amplifier-dev config show            Show configuration
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -277,6 +294,16 @@ Examples:
         type=Path,
         nargs="?",
         help="Directory for workspace (required for create/destroy)",
+    )
+    parser.add_argument(
+        "-k", "--kill",
+        action="store_true",
+        help="Kill tmux session only (preserve workspace files)",
+    )
+    parser.add_argument(
+        "-f", "--fresh",
+        action="store_true",
+        help="Kill session and start fresh (implies --kill, then creates new session)",
     )
     parser.add_argument(
         "-d", "--destroy",
