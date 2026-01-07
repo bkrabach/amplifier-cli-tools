@@ -103,29 +103,17 @@ amplifier-dev config set dev.use_tmux false
 - `get KEY` - Get a setting value (e.g., `dev.use_tmux`)
 - `set KEY VALUE` - Set a setting value
 
-### amplifier-reset
+## Resetting Amplifier
 
-Reset the Amplifier installation by cleaning cache, uninstalling, and reinstalling.
+To reset your Amplifier installation, use the built-in `amplifier reset` command:
 
 ```bash
-# Reset with default preservation
-amplifier-reset
-
-# Reset everything (including preserved directories)
-amplifier-reset --all
-
-# Just uninstall, don't reinstall
-amplifier-reset --no-install
-
-# Skip confirmation
-amplifier-reset -y
+amplifier reset              # Interactive mode
+amplifier reset --cache-only # Just clear cache (safest)
+amplifier reset --full -y    # Remove everything
 ```
 
-**Options:**
-- `-a, --all` - Remove entire ~/.amplifier including preserved dirs
-- `-y, --yes` - Skip confirmation prompt
-- `--no-install` - Uninstall only, don't reinstall
-- `--no-launch` - Don't launch amplifier after install
+See `amplifier reset --help` for all options.
 
 ## Configuration
 
@@ -157,13 +145,6 @@ agents_template = ""
 shell = ""           # Two panes, just shell
 git = "lazygit"
 files = "mc"
-
-[reset]
-# Source for reinstalling amplifier
-install_source = "git+https://github.com/microsoft/amplifier"
-
-# Directories to preserve in ~/.amplifier during reset
-preserve = ["projects"]
 ```
 
 ## Requirements

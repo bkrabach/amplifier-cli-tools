@@ -1,7 +1,7 @@
 """CLI entry points for amplifier-cli-tools.
 
 Thin layer that parses arguments and calls business logic modules.
-All business logic is in dev.py, reset.py, and setup.py - this module only handles:
+All business logic is in dev.py and setup.py - this module only handles:
 - Argument parsing via argparse
 - Error handling and exit codes
 - User confirmation prompts
@@ -9,18 +9,15 @@ All business logic is in dev.py, reset.py, and setup.py - this module only handl
 Entry Points
 ------------
 - main_dev(): amplifier-dev command (with setup/config subcommands)
-- main_reset(): amplifier-reset command
 """
 
 import argparse
 import sys
 from pathlib import Path
 
-from .config import load_config, save_reset_preserve
+from .config import load_config
 from . import dev
-from . import reset
 from . import tmux
-from .interactive import ChecklistItem, run_checklist
 
 
 def _confirm(message: str) -> bool:
@@ -362,197 +359,3 @@ Examples:
         return 0
 
     return _cmd_run(args)
-
-
-def _parse_category_list(value: str) -> set[str]:
-    """Parse a comma-separated list of category names.
-
-    Args:
-        value: Comma-separated string like "projects,settings,keys"
-
-    Returns:
-        Set of valid category names
-
-    Raises:
-        argparse.ArgumentTypeError: If any category name is invalid
-    """
-    categories = {c.strip() for c in value.split(",") if c.strip()}
-    valid = set(reset.RESET_CATEGORIES.keys())
-    invalid = categories - valid
-
-    if invalid:
-        raise argparse.ArgumentTypeError(
-            f"Invalid categories: {', '.join(sorted(invalid))}. "
-            f"Valid categories: {', '.join(sorted(valid))}"
-        )
-
-    return categories
-
-
-def _run_interactive_reset(config) -> set[str] | None:
-    """Run the interactive checklist for reset category selection.
-
-    Args:
-        config: Loaded configuration
-
-    Returns:
-        Set of category names to preserve, or None if cancelled
-    """
-    # Build checklist items from categories
-    last_preserve = set(config.reset.last_preserve)
-    items = []
-
-    for category in reset.CATEGORY_ORDER:
-        description = reset.CATEGORY_DESCRIPTIONS.get(category, "")
-        selected = category in last_preserve
-        items.append(ChecklistItem(key=category, description=description, selected=selected))
-
-    # Run interactive selection
-    return run_checklist(items, title="Amplifier Reset")
-
-
-def main_reset() -> int:
-    """Entry point for amplifier-reset command.
-
-    Resets the Amplifier installation by removing ~/.amplifier and reinstalling.
-
-    Returns:
-        Exit code (0 success, 1 error, 130 keyboard interrupt)
-    """
-    parser = argparse.ArgumentParser(
-        prog="amplifier-reset",
-        description="Reset Amplifier installation.",
-        epilog=f"""
-Categories: {', '.join(reset.CATEGORY_ORDER)}
-
-Examples:
-  amplifier-reset                      Interactive mode (default)
-  amplifier-reset --cache-only         Clear only cache (safest)
-  amplifier-reset --preserve projects,settings,keys -y
-                                       Scripted: preserve specific categories
-  amplifier-reset --remove cache,registry -y
-                                       Scripted: remove specific categories
-  amplifier-reset --full -y            Remove everything (nuclear option)
-  amplifier-reset --dry-run            Preview what would be removed
-""",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-
-    # Category selection (mutually exclusive group)
-    category_group = parser.add_mutually_exclusive_group()
-    category_group.add_argument(
-        "--preserve",
-        metavar="LIST",
-        type=_parse_category_list,
-        help="Comma-separated categories to preserve (e.g., projects,settings,keys)",
-    )
-    category_group.add_argument(
-        "--remove",
-        metavar="LIST",
-        type=_parse_category_list,
-        help="Comma-separated categories to remove (e.g., cache,registry)",
-    )
-    category_group.add_argument(
-        "--cache-only",
-        action="store_true",
-        help="Only clear cache (safest option, shortcut for --remove cache)",
-    )
-    category_group.add_argument(
-        "--full",
-        action="store_true",
-        help="Remove everything including projects (nuclear option)",
-    )
-
-    # Other options
-    parser.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Skip interactive prompt (required with --preserve/--remove/--cache-only/--full)",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview what would be removed without making changes",
-    )
-    parser.add_argument(
-        "--no-install",
-        action="store_true",
-        help="Uninstall only, don't reinstall",
-    )
-    parser.add_argument(
-        "--no-launch",
-        action="store_true",
-        help="Don't launch amplifier after install",
-    )
-
-    args = parser.parse_args()
-
-    try:
-        config = load_config()
-
-        # Determine preserve set based on arguments
-        preserve: set[str] | None = None
-
-        if args.full:
-            # Full reset - preserve nothing
-            preserve = set()
-        elif args.cache_only:
-            # Only remove cache - preserve everything else
-            preserve = set(reset.RESET_CATEGORIES.keys()) - {"cache"}
-        elif args.remove is not None:
-            # Remove specified categories - preserve everything else
-            preserve = set(reset.RESET_CATEGORIES.keys()) - args.remove
-        elif args.preserve is not None:
-            # Preserve specified categories
-            preserve = args.preserve
-        elif args.yes:
-            # Non-interactive with -y but no category flags: use last_preserve
-            preserve = set(config.reset.last_preserve)
-        else:
-            # Interactive mode
-            preserve = _run_interactive_reset(config)
-            if preserve is None:
-                print("Aborted.")
-                return 0
-
-            # Save selections for next time
-            save_reset_preserve(sorted(preserve))
-
-        # For scripted mode without -y, require confirmation
-        if not args.yes and not args.dry_run:
-            # Show what will happen
-            preserve_names = sorted(preserve) if preserve else []
-            remove_names = sorted(set(reset.RESET_CATEGORIES.keys()) - preserve)
-
-            if not preserve:
-                message = "This will remove ~/.amplifier entirely (ALL contents)."
-            else:
-                message = f"This will reset ~/.amplifier.\n"
-                message += f"  Preserving: {', '.join(preserve_names)}\n"
-                message += f"  Removing: {', '.join(remove_names)}"
-
-            if not args.no_install:
-                message += "\nAmplifier will be reinstalled afterward."
-
-            if not _confirm(message):
-                print("Aborted.")
-                return 0
-
-        # Run reset workflow
-        success = reset.run_reset(
-            config=config.reset,
-            preserve=preserve,
-            skip_confirm=True,  # We already confirmed above or user passed -y
-            no_install=args.no_install,
-            no_launch=args.no_launch,
-            dry_run=args.dry_run,
-        )
-        return 0 if success else 1
-
-    except KeyboardInterrupt:
-        print("\nAborted.")
-        return 130
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1

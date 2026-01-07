@@ -26,11 +26,3 @@ agents_template = ""
 shell = ""           # Two panes, just shell
 git = "lazygit"      # lazygit for git operations
 files = "mc"         # midnight commander for file browsing
-
-[reset]
-# Source for reinstalling amplifier
-install_source = "git+https://github.com/microsoft/amplifier"
-
-# Last-used preserve selections (updated automatically after interactive use)
-# Categories: projects, settings, keys, cache, registry
-last_preserve = ["projects", "settings", "keys"]

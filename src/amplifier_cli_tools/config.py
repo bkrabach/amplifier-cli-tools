@@ -21,10 +21,6 @@ agents_template = ""  # Path to custom template, empty = use built-in
 shell = ""        # Empty = shell only (no command)
 git = "lazygit"
 files = "mc"
-
-[reset]
-install_source = "git+https://github.com/microsoft/amplifier"
-last_preserve = ["projects", "settings", "keys"]  # Last-used preserve selections
 ```
 
 Usage
@@ -79,29 +75,14 @@ class DevConfig:
 
 
 @dataclass
-class ResetConfig:
-    """Configuration for the 'reset' command.
-
-    Attributes:
-        install_source: pip install source for amplifier
-        last_preserve: Last-used preserve selections (category names)
-    """
-
-    install_source: str
-    last_preserve: list[str]
-
-
-@dataclass
 class Config:
     """Root configuration object.
 
     Attributes:
         dev: Configuration for the 'dev' command
-        reset: Configuration for the 'reset' command
     """
 
     dev: DevConfig
-    reset: ResetConfig
 
 
 def _load_bundled_defaults() -> dict:
@@ -143,10 +124,6 @@ def _get_hardcoded_fallback() -> Config:
                 WindowConfig(name="files", command="mc"),
             ],
         ),
-        reset=ResetConfig(
-            install_source="git+https://github.com/microsoft/amplifier",
-            last_preserve=["projects", "settings", "keys"],
-        ),
     )
 
 
@@ -168,7 +145,6 @@ def get_default_config() -> Config:
 
     # Parse the template data into Config
     dev_data = data.get("dev", {})
-    reset_data = data.get("reset", {})
 
     return Config(
         dev=DevConfig(
@@ -178,12 +154,6 @@ def get_default_config() -> Config:
             default_prompt=dev_data.get("default_prompt", ""),
             agents_template=dev_data.get("agents_template", ""),
             windows=_parse_windows(dev_data.get("windows", {})),
-        ),
-        reset=ResetConfig(
-            install_source=reset_data.get("install_source", ""),
-            last_preserve=reset_data.get(
-                "last_preserve", ["projects", "settings", "keys"]
-            ),
         ),
     )
 
@@ -255,41 +225,7 @@ def load_config(config_path: Path | None = None) -> Config:
         ),
     )
 
-    # Merge reset section
-    reset_data = data.get("reset", {})
-    reset_config = ResetConfig(
-        install_source=reset_data.get("install_source", defaults.reset.install_source),
-        last_preserve=reset_data.get("last_preserve", defaults.reset.last_preserve),
-    )
-
-    return Config(dev=dev_config, reset=reset_config)
-
-
-def save_reset_preserve(preserve: list[str], config_path: Path | None = None) -> None:
-    """Save the last-used preserve selections to config file.
-
-    Updates only the reset.last_preserve field, preserving all other settings.
-
-    Args:
-        preserve: List of category names that were preserved
-        config_path: Optional path to config file. If None, uses default.
-    """
-    path = config_path if config_path is not None else DEFAULT_CONFIG_PATH
-
-    # Load existing config or start fresh
-    if path.exists():
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
-    else:
-        data = {}
-
-    # Update reset.last_preserve
-    if "reset" not in data:
-        data["reset"] = {}
-    data["reset"]["last_preserve"] = preserve
-
-    # Write back as TOML
-    _write_toml(path, data)
+    return Config(dev=dev_config)
 
 
 def _write_toml(path: Path, data: dict) -> None:
