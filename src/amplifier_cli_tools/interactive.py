@@ -121,8 +121,9 @@ def _render_checklist(
     """
     lines = []
 
-    # Title
-    lines.append(f"\n{title}")
+    # Title (blank line for spacing, then title)
+    lines.append("")
+    lines.append(title)
     lines.append("=" * len(title))
     lines.append("")
     lines.append("Select what to PRESERVE (↑↓ navigate, space toggle, enter confirm):")
