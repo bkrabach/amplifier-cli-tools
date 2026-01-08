@@ -21,7 +21,7 @@ import os
 import shlex
 
 from .config import DevConfig
-from .shell import ensure_commands, run, ShellError
+from .shell import ensure_commands, ShellError
 from . import git
 from . import tmux
 
@@ -40,6 +40,39 @@ def get_session_name(workdir: Path) -> str:
         'my-workspace'
     """
     return workdir.name
+
+
+def build_main_command(config: DevConfig) -> str:
+    """Build the main command with bundle flag if configured.
+
+    Inserts --bundle <bundle> after 'amplifier run' if config.bundle is set.
+
+    Args:
+        config: Dev configuration with main_command and bundle.
+
+    Returns:
+        Command string with bundle flag inserted if applicable.
+
+    Example:
+        >>> config = DevConfig(main_command="amplifier run --mode chat", bundle="amplifier-dev", ...)
+        >>> build_main_command(config)
+        'amplifier run --bundle amplifier-dev --mode chat'
+    """
+    if not config.main_command:
+        return ""
+
+    if not config.bundle:
+        return config.main_command
+
+    # Insert --bundle after 'amplifier run'
+    cmd = config.main_command
+    if "amplifier run" in cmd:
+        cmd = cmd.replace("amplifier run", f"amplifier run --bundle {config.bundle}", 1)
+    else:
+        # Fallback: append to end if pattern not found
+        cmd = f"{cmd} --bundle {config.bundle}"
+
+    return cmd
 
 
 def compute_final_prompt(
@@ -251,13 +284,14 @@ def _run_amplifier_directly(
     os.chdir(workdir)
     print(f"Changed to: {workdir}")
 
-    # Build command
-    if not config.main_command:
+    # Build command with bundle flag
+    final_command = build_main_command(config)
+    if not final_command:
         print("No main_command configured. Shell ready.")
         return True
 
     # Parse command and add prompt if provided
-    cmd_parts = shlex.split(config.main_command)
+    cmd_parts = shlex.split(final_command)
     if final_prompt:
         cmd_parts.extend(["--prompt", final_prompt])
 
@@ -341,7 +375,7 @@ def run_dev(
             name=session_name,
             workdir=workdir,
             main_window_name="amplifier",
-            main_command=config.main_command,
+            main_command=build_main_command(config),
             prompt=final_prompt,
             windows=config.windows,
         )
@@ -358,4 +392,5 @@ __all__ = [
     "destroy_workspace",
     "get_session_name",
     "compute_final_prompt",
+    "build_main_command",
 ]
