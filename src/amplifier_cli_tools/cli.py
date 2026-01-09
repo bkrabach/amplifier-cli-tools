@@ -117,54 +117,94 @@ def _cmd_setup(args: argparse.Namespace) -> int:
         return 1
 
 
+def _parse_config_value(value_str: str):
+    """Parse a config value string into appropriate Python type."""
+    lower = value_str.lower()
+    if lower in ("true", "yes", "on"):
+        return True
+    if lower in ("false", "no", "off"):
+        return False
+    # Try as number
+    try:
+        return int(value_str)
+    except ValueError:
+        try:
+            return float(value_str)
+        except ValueError:
+            return value_str
+
+
 def _cmd_config(args: argparse.Namespace) -> int:
     """Handle the config subcommand."""
     from . import config_manager
 
     try:
         if args.config_command is None or args.config_command == "show":
-            print(config_manager.show_config())
+            # Use full config display
+            print(config_manager.show_config_full())
             return 0
 
         elif args.config_command == "get":
-            parts = args.key.split(".", 1)
-            if len(parts) != 2:
-                print("Error: Key must be in format 'section.key' (e.g., dev.use_tmux)")
+            try:
+                value = config_manager.get_nested_setting(args.key)
+                if value is None:
+                    print(f"{args.key}: (not set)")
+                elif isinstance(value, list):
+                    print(f"{args.key}:")
+                    for i, item in enumerate(value):
+                        print(f"  [{i}] {item}")
+                elif isinstance(value, dict):
+                    print(f"{args.key}:")
+                    for k, v in value.items():
+                        print(f"  {k} = {v}")
+                elif isinstance(value, bool):
+                    print(f"{args.key} = {str(value).lower()}")
+                else:
+                    print(f"{args.key} = {value}")
+            except ValueError as e:
+                print(f"Error: {e}", file=sys.stderr)
                 return 1
-            section, key = parts
-            value = config_manager.get_setting(section, key)
-            if value is None:
-                print(f"{args.key}: (not set)")
-            else:
-                print(f"{args.key} = {value}")
             return 0
 
         elif args.config_command == "set":
-            parts = args.key.split(".", 1)
-            if len(parts) != 2:
-                print("Error: Key must be in format 'section.key' (e.g., dev.use_tmux)")
+            try:
+                value = _parse_config_value(args.value)
+                config_manager.set_nested_setting(args.key, value)
+                print(f"Set {args.key} = {value}")
+                print(f"Config saved to: {config_manager.get_config_path()}")
+            except ValueError as e:
+                print(f"Error: {e}", file=sys.stderr)
                 return 1
-            section, key = parts
+            return 0
 
-            # Parse value
-            value_str = args.value.lower()
-            if value_str in ("true", "yes", "on", "1"):
-                value = True
-            elif value_str in ("false", "no", "off", "0"):
-                value = False
-            else:
-                # Try as number, else string
-                try:
-                    value = int(args.value)
-                except ValueError:
-                    try:
-                        value = float(args.value)
-                    except ValueError:
-                        value = args.value
+        elif args.config_command == "add":
+            try:
+                result = config_manager.add_to_setting(args.key, args.value)
+                print(result)
+                print(f"Config saved to: {config_manager.get_config_path()}")
+            except ValueError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
+            return 0
 
-            config_manager.set_setting(section, key, value)
-            print(f"Set {args.key} = {value}")
-            print(f"Config saved to: {config_manager.get_config_path()}")
+        elif args.config_command == "remove":
+            try:
+                result = config_manager.remove_from_setting(args.key, args.value)
+                print(result)
+                print(f"Config saved to: {config_manager.get_config_path()}")
+            except ValueError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
+            return 0
+
+        elif args.config_command == "reset":
+            try:
+                key = getattr(args, "key", None)
+                result = config_manager.reset_setting(key)
+                print(result)
+            except ValueError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
             return 0
 
         elif args.config_command == "tmux-on":
@@ -252,12 +292,58 @@ def _main_dev_subcommands() -> int:
         "tmux-off", help="Disable tmux mode (run amplifier directly)"
     )
 
-    get_parser = config_subparsers.add_parser("get", help="Get a configuration value")
-    get_parser.add_argument("key", help="Setting key (e.g., dev.use_tmux)")
+    get_parser = config_subparsers.add_parser(
+        "get", help="Get a configuration value (supports dot notation)"
+    )
+    get_parser.add_argument(
+        "key",
+        help="Setting key (e.g., dev.use_tmux, dev.repos, dev.windows.git)",
+    )
 
-    set_parser = config_subparsers.add_parser("set", help="Set a configuration value")
-    set_parser.add_argument("key", help="Setting key (e.g., dev.use_tmux)")
+    set_parser = config_subparsers.add_parser(
+        "set", help="Set a scalar or dict entry value"
+    )
+    set_parser.add_argument(
+        "key",
+        help="Setting key (e.g., dev.use_tmux, dev.windows.git)",
+    )
     set_parser.add_argument("value", help="Value to set")
+
+    add_parser = config_subparsers.add_parser(
+        "add", help="Add to a list or dict setting"
+    )
+    add_parser.add_argument(
+        "key",
+        help="Setting key (e.g., dev.repos for list, dev.windows for dict)",
+    )
+    add_parser.add_argument(
+        "value",
+        help="Value to add (for dicts: 'key=value' format or use full key path)",
+    )
+
+    remove_parser = config_subparsers.add_parser(
+        "remove", help="Remove from a list or dict setting"
+    )
+    remove_parser.add_argument(
+        "key",
+        help="Setting key (e.g., dev.repos, dev.windows.git)",
+    )
+    remove_parser.add_argument(
+        "value",
+        nargs="?",
+        default=None,
+        help="For lists: value or index to remove. For dicts: omit if key path includes entry name",
+    )
+
+    reset_parser = config_subparsers.add_parser(
+        "reset", help="Reset setting(s) to default values"
+    )
+    reset_parser.add_argument(
+        "key",
+        nargs="?",
+        default=None,
+        help="Setting key to reset (omit to reset all settings)",
+    )
 
     args = parser.parse_args()
 
