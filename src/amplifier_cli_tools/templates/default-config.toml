@@ -12,11 +12,7 @@ repos = [
     "https://github.com/microsoft/amplifier-foundation.git",
 ]
 
-# Bundle to use for Amplifier ecosystem development
-# Full git URL with subdirectory fragment - includes shadow integration
-bundle = "git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=bundles/amplifier-dev.yaml"
-
-# Command to run in main window (bundle is inserted automatically if set)
+# Command to run in main window
 main_command = "amplifier run --mode chat"
 
 # Default prompt (empty = no auto-prompt)

@@ -43,36 +43,20 @@ def get_session_name(workdir: Path) -> str:
 
 
 def build_main_command(config: DevConfig) -> str:
-    """Build the main command with bundle flag if configured.
-
-    Inserts --bundle <bundle> after 'amplifier run' if config.bundle is set.
+    """Build the main command from config.
 
     Args:
-        config: Dev configuration with main_command and bundle.
+        config: Dev configuration with main_command.
 
     Returns:
-        Command string with bundle flag inserted if applicable.
+        Command string from config, or empty string if not set.
 
     Example:
-        >>> config = DevConfig(main_command="amplifier run --mode chat", bundle="amplifier-dev", ...)
+        >>> config = DevConfig(main_command="amplifier run --mode chat", ...)
         >>> build_main_command(config)
-        'amplifier run --bundle amplifier-dev --mode chat'
+        'amplifier run --mode chat'
     """
-    if not config.main_command:
-        return ""
-
-    if not config.bundle:
-        return config.main_command
-
-    # Insert --bundle after 'amplifier run'
-    cmd = config.main_command
-    if "amplifier run" in cmd:
-        cmd = cmd.replace("amplifier run", f"amplifier run --bundle {config.bundle}", 1)
-    else:
-        # Fallback: append to end if pattern not found
-        cmd = f"{cmd} --bundle {config.bundle}"
-
-    return cmd
+    return config.main_command if config.main_command else ""
 
 
 def compute_final_prompt(
@@ -107,6 +91,45 @@ def compute_final_prompt(
         return extra
 
     return base_prompt
+
+
+def create_amplifier_settings(workdir: Path, profile: str = "amplifier-dev") -> bool:
+    """Create .amplifier/settings.yaml with active profile if not exists.
+
+    The settings.yaml file tells Amplifier which profile to use by default
+    when running in this workspace. The amplifier-dev profile is included
+    in the base Amplifier install.
+
+    Args:
+        workdir: Workspace directory path.
+        profile: Profile name to set as active (default: amplifier-dev).
+
+    Returns:
+        True on success, False on failure.
+    """
+    amplifier_dir = workdir / ".amplifier"
+    settings_path = amplifier_dir / "settings.yaml"
+
+    # Skip if already exists
+    if settings_path.exists():
+        print(f".amplifier/settings.yaml already exists at {settings_path}")
+        return True
+
+    try:
+        # Create .amplifier directory if needed
+        amplifier_dir.mkdir(exist_ok=True)
+
+        # Write settings.yaml
+        content = f"""\
+# Amplifier workspace settings
+active_profile: {profile}
+"""
+        settings_path.write_text(content)
+        print(f"Created .amplifier/settings.yaml with profile: {profile}")
+        return True
+    except OSError as e:
+        print(f"Failed to create .amplifier/settings.yaml: {e}")
+        return False
 
 
 def create_agents_md(workdir: Path, config: DevConfig) -> bool:
@@ -148,9 +171,9 @@ def create_agents_md(workdir: Path, config: DevConfig) -> bool:
 
     # Try built-in template
     try:
-        template_content = resources.files(__package__).joinpath(
-            "templates", "AGENTS.md"
-        ).read_text()
+        template_content = (
+            resources.files(__package__).joinpath("templates", "AGENTS.md").read_text()
+        )
         print("Creating AGENTS.md from built-in template")
         agents_path.write_text(template_content)
         return True
@@ -220,6 +243,10 @@ def setup_workspace(workdir: Path, config: DevConfig) -> bool:
 
         # Create AGENTS.md
         if not create_agents_md(workdir, config):
+            return False
+
+        # Create .amplifier/settings.yaml
+        if not create_amplifier_settings(workdir):
             return False
 
         return True
@@ -389,6 +416,7 @@ __all__ = [
     "run_dev",
     "setup_workspace",
     "create_agents_md",
+    "create_amplifier_settings",
     "destroy_workspace",
     "get_session_name",
     "compute_final_prompt",

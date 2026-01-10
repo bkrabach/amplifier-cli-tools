@@ -60,8 +60,7 @@ class DevConfig:
     Attributes:
         use_tmux: Whether to use tmux (False = run amplifier directly)
         repos: List of git repository URLs to clone
-        bundle: Bundle to use (e.g., "amplifier-dev" for ecosystem development)
-        main_command: Command to run in the main window (bundle is inserted automatically)
+        main_command: Command to run in the main window
         default_prompt: Default prompt to send after main_command starts
         agents_template: Path to custom AGENTS.md template, empty = use built-in
         windows: List of additional tmux windows to create
@@ -69,7 +68,6 @@ class DevConfig:
 
     use_tmux: bool
     repos: list[str]
-    bundle: str  # Bundle name, empty = no bundle flag
     main_command: str
     default_prompt: str
     agents_template: str  # Path to custom template, empty = use built-in
@@ -117,7 +115,6 @@ def _get_hardcoded_fallback() -> Config:
                 "https://github.com/microsoft/amplifier-core.git",
                 "https://github.com/microsoft/amplifier-foundation.git",
             ],
-            bundle="git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=bundles/amplifier-dev.yaml",
             main_command="amplifier run --mode chat",
             default_prompt="",
             agents_template="",
@@ -153,7 +150,6 @@ def get_default_config() -> Config:
         dev=DevConfig(
             use_tmux=dev_data.get("use_tmux", True),
             repos=dev_data.get("repos", []),
-            bundle=dev_data.get("bundle", "git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=bundles/amplifier-dev.yaml"),
             main_command=dev_data.get("main_command", ""),
             default_prompt=dev_data.get("default_prompt", ""),
             agents_template=dev_data.get("agents_template", ""),
@@ -217,7 +213,6 @@ def load_config(config_path: Path | None = None) -> Config:
     dev_config = DevConfig(
         use_tmux=dev_data.get("use_tmux", defaults.dev.use_tmux),
         repos=dev_data.get("repos", defaults.dev.repos),
-        bundle=dev_data.get("bundle", defaults.dev.bundle),
         main_command=dev_data.get("main_command", defaults.dev.main_command),
         default_prompt=dev_data.get("default_prompt", defaults.dev.default_prompt),
         agents_template=_expand_path(
@@ -231,6 +226,3 @@ def load_config(config_path: Path | None = None) -> Config:
     )
 
     return Config(dev=dev_config)
-
-
-
