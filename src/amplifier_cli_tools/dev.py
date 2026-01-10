@@ -93,16 +93,16 @@ def compute_final_prompt(
     return base_prompt
 
 
-def create_amplifier_settings(workdir: Path, profile: str = "amplifier-dev") -> bool:
-    """Create .amplifier/settings.yaml with active profile if not exists.
+def create_amplifier_settings(workdir: Path, bundle: str = "amplifier-dev") -> bool:
+    """Create .amplifier/settings.yaml with active bundle if not exists.
 
-    The settings.yaml file tells Amplifier which profile to use by default
-    when running in this workspace. The amplifier-dev profile is included
+    The settings.yaml file tells Amplifier which bundle to use by default
+    when running in this workspace. The amplifier-dev bundle is included
     in the base Amplifier install.
 
     Args:
         workdir: Workspace directory path.
-        profile: Profile name to set as active (default: amplifier-dev).
+        bundle: Bundle name to set as active (default: amplifier-dev).
 
     Returns:
         True on success, False on failure.
@@ -121,11 +121,11 @@ def create_amplifier_settings(workdir: Path, profile: str = "amplifier-dev") -> 
 
         # Write settings.yaml
         content = f"""\
-# Amplifier workspace settings
-active_profile: {profile}
+bundle:
+  active: {bundle}
 """
         settings_path.write_text(content)
-        print(f"Created .amplifier/settings.yaml with profile: {profile}")
+        print(f"Created .amplifier/settings.yaml with bundle: {bundle}")
         return True
     except OSError as e:
         print(f"Failed to create .amplifier/settings.yaml: {e}")
