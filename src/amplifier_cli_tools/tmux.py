@@ -18,11 +18,12 @@ from .shell import command_exists, run, try_install_tool
 
 def _run_tmux(*args: str) -> None:
     """Run tmux command with arguments directly (no shell parsing).
-    
+
     This avoids quote mangling that happens with shell=True.
     Matches the behavior of the bash script's direct tmux invocation.
     """
     subprocess.run(["tmux", *args], check=True)
+
 
 __all__ = [
     "session_exists",
@@ -96,10 +97,13 @@ def create_session(
     # Match bash script exactly: NO -c flag (cd is in rcfile), pass shell-command as single arg
     # Using _run_tmux() avoids shell parsing that mangles quotes
     _run_tmux(
-        "new-session", "-d",
-        "-s", name,
-        "-n", main_window_name,
-        f"exec bash --rcfile '{main_rcfile}'"
+        "new-session",
+        "-d",
+        "-s",
+        name,
+        "-n",
+        main_window_name,
+        f"exec bash --rcfile '{main_rcfile}'",
     )
 
     # Create additional windows
@@ -125,17 +129,17 @@ def select_window(session: str, window: str) -> None:
 
 def _flush_terminal_input() -> None:
     """Flush any pending terminal input (WezTerm capability query responses).
-    
+
     WezTerm sends DA1, DA2, XTVERSION queries when terminal context changes.
     These can appear as garbage characters if not flushed before attach.
     """
     import sys
     import select
     import time
-    
+
     # Give WezTerm time to send its queries
     time.sleep(0.3)
-    
+
     # Flush stdin if there's pending input
     try:
         # Check if stdin has pending data (non-blocking)
@@ -173,14 +177,19 @@ def _create_main_rcfile(
     workdir: Path,
     main_command: str,
     prompt: str,
+    resume_bundle: str = "amplifier-dev",
 ) -> Path:
     """Create rcfile for main window with command execution.
+
+    Checks for existing Amplifier sessions first. If sessions exist,
+    runs `amplifier resume` instead of starting a new session.
 
     Args:
         rcfile_dir: Directory to store rcfile.
         workdir: Working directory.
         main_command: Command to run.
         prompt: Prompt text for command.
+        resume_bundle: Bundle to use when resuming (default: amplifier-dev).
 
     Returns:
         Path to created rcfile.
@@ -190,6 +199,7 @@ def _create_main_rcfile(
     # shlex.quote() handles shell escaping - no need for extra $(printf '%s' ...) wrapper
     # which adds unnecessary subshell overhead and potential timing issues
     escaped_prompt = shlex.quote(prompt)
+    escaped_bundle = shlex.quote(resume_bundle)
     rcfile_content = f"""\
 source ~/.bashrc 2>/dev/null
 cd {shlex.quote(str(workdir))}
@@ -198,7 +208,20 @@ cd {shlex.quote(str(workdir))}
 # WezTerm sends DA1, DA2, XTVERSION queries - need enough time for all responses
 sleep 0.5
 read -t 0.2 -n 10000 discard 2>/dev/null || true
-{main_command} {escaped_prompt}
+
+# Check for existing Amplifier sessions
+session_output=$(amplifier session list 2>/dev/null)
+if echo "$session_output" | grep -q "No sessions found"; then
+    # No sessions - start new
+    {main_command} {escaped_prompt}
+elif echo "$session_output" | grep -q "Session ID"; then
+    # Sessions exist - offer to resume
+    echo "Existing Amplifier sessions detected. Launching resume..."
+    amplifier resume --force-bundle {escaped_bundle}
+else
+    # Fallback (e.g., command failed) - start new
+    {main_command} {escaped_prompt}
+fi
 """
     rcfile.write_text(rcfile_content)
     rcfile.chmod(0o755)
@@ -247,15 +270,19 @@ def _create_window(
         # Match bash script: NO -c flag, pass shell-command as single arg
         _run_tmux(
             "new-window",
-            "-t", session,
-            "-n", config.name,
-            f"exec bash --rcfile '{shell_rcfile}'"
+            "-t",
+            session,
+            "-n",
+            config.name,
+            f"exec bash --rcfile '{shell_rcfile}'",
         )
         # Split horizontally for second pane
         _run_tmux(
-            "split-window", "-h",
-            "-t", f"{session}:{config.name}",
-            f"exec bash --rcfile '{shell_rcfile}'"
+            "split-window",
+            "-h",
+            "-t",
+            f"{session}:{config.name}",
+            f"exec bash --rcfile '{shell_rcfile}'",
         )
         return
 
@@ -279,12 +306,14 @@ cd {shlex.quote(str(workdir))}
 """
     cmd_rcfile.write_text(cmd_rcfile_content)
     cmd_rcfile.chmod(0o755)
-    
+
     _run_tmux(
         "new-window",
-        "-t", session,
-        "-n", config.name,
-        f"exec bash --rcfile '{cmd_rcfile}'"
+        "-t",
+        session,
+        "-n",
+        config.name,
+        f"exec bash --rcfile '{cmd_rcfile}'",
     )
 
 
@@ -309,9 +338,11 @@ def _create_missing_tool_window(
     # Create window that displays the message then drops to shell
     _run_tmux(
         "new-window",
-        "-t", session,
-        "-n", window_name,
-        f"bash -c 'cd {shlex.quote(str(workdir))}; echo {shlex.quote(message)}; exec bash'"
+        "-t",
+        session,
+        "-n",
+        window_name,
+        f"bash -c 'cd {shlex.quote(str(workdir))}; echo {shlex.quote(message)}; exec bash'",
     )
 
 

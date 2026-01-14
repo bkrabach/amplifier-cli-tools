@@ -21,9 +21,34 @@ import os
 import shlex
 
 from .config import DevConfig
-from .shell import ensure_commands, ShellError
+from .shell import ensure_commands, run, ShellError
 from . import git
 from . import tmux
+
+
+# Bundle to use when resuming sessions
+RESUME_BUNDLE = "amplifier-dev"
+
+
+def has_amplifier_sessions() -> bool:
+    """Check if there are existing Amplifier sessions for the current project.
+
+    Runs `amplifier session list` and checks if any sessions exist.
+
+    Returns:
+        True if sessions exist, False if no sessions found or on error.
+    """
+    try:
+        result = run("amplifier session list", check=False, capture=True, quiet=True)
+        # If output contains "No sessions found." there are no sessions
+        if "No sessions found" in result.stdout:
+            return False
+        # If we got a table (sessions exist), the output will have session data
+        # Check for table markers or session IDs
+        return "Session ID" in result.stdout or "│" in result.stdout
+    except Exception:
+        # On any error, fall back to starting new session
+        return False
 
 
 def get_session_name(workdir: Path) -> str:
@@ -295,6 +320,7 @@ def _run_amplifier_directly(
     """Run amplifier directly without tmux.
 
     Changes to workdir and executes the main command, optionally with a prompt.
+    If existing Amplifier sessions are detected, offers to resume instead.
 
     Args:
         workdir: Workspace directory.
@@ -305,11 +331,21 @@ def _run_amplifier_directly(
     Returns:
         True (doesn't return on success due to execvp).
     """
-    final_prompt = compute_final_prompt(config, prompt, extra)
-
-    # Change to workdir
+    # Change to workdir first (session list is project-scoped)
     os.chdir(workdir)
     print(f"Changed to: {workdir}")
+
+    # Check for existing Amplifier sessions
+    if has_amplifier_sessions():
+        print("Existing Amplifier sessions detected. Launching resume...")
+        cmd_parts = ["amplifier", "resume", "--force-bundle", RESUME_BUNDLE]
+        print(f"Running: {' '.join(cmd_parts)}")
+        os.execvp(cmd_parts[0], cmd_parts)
+        # execvp doesn't return on success
+        return True
+
+    # No existing sessions - start a new one
+    final_prompt = compute_final_prompt(config, prompt, extra)
 
     # Build command with bundle flag
     final_command = build_main_command(config)
