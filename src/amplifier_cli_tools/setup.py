@@ -60,13 +60,39 @@ def check_and_install_tools(interactive: bool = True) -> dict[str, bool]:
     return results
 
 
+def _inject_line_if_missing(
+    file_path: Path, search_line: str, insert_block: str
+) -> bool:
+    """Inject a block into a file if search_line not found.
+
+    Args:
+        file_path: Path to file to modify
+        search_line: Line to search for (if found, skip injection)
+        insert_block: Block of text to append if search_line not found
+
+    Returns:
+        True if block was injected, False if already present
+    """
+    if not file_path.exists():
+        return False
+
+    content = file_path.read_text()
+    if search_line in content:
+        return False
+
+    # Append the block
+    with file_path.open("a") as f:
+        f.write("\n" + insert_block)
+    return True
+
+
 def ensure_tmux_conf() -> bool:
     """Create layered tmux config structure.
 
     Creates:
     - ~/.config/amplifier-cli-tools/tmux.conf (base, always updated)
-    - ~/.config/amplifier-cli-tools/tmux.conf.local (user customizations, created once)
-    - ~/.tmux.conf (wrapper that sources both, created once)
+    - ~/.config/amplifier-cli-tools/tmux.conf.local (empty, created once)
+    - ~/.tmux.conf (wrapper, created if missing OR injected into existing)
 
     Returns:
         True if config created successfully, False on error.
@@ -100,8 +126,9 @@ def ensure_tmux_conf() -> bool:
     else:
         print(f"Local config exists: {local_conf}")
 
-    # Create wrapper if it doesn't exist
+    # Create or inject into wrapper
     if not wrapper_conf.exists():
+        # Create new wrapper
         wrapper_content = """# Amplifier base config (updated by amplifier-dev setup)
 source-file ~/.config/amplifier-cli-tools/tmux.conf
 
@@ -114,7 +141,28 @@ if-shell "[ -f ~/.config/amplifier-cli-tools/tmux.conf.local ]" \\
         print("  - Sources base config (gets updates)")
         print("  - Sources local config (your customizations)")
     else:
-        print(f"Wrapper exists: {wrapper_conf}")
+        # Wrapper exists - inject amplifier config if not already present
+        base_injected = _inject_line_if_missing(
+            wrapper_conf,
+            "~/.config/amplifier-cli-tools/tmux.conf",
+            """# Amplifier base config (updated by amplifier-dev setup)
+source-file ~/.config/amplifier-cli-tools/tmux.conf
+""",
+        )
+
+        local_injected = _inject_line_if_missing(
+            wrapper_conf,
+            "~/.config/amplifier-cli-tools/tmux.conf.local",
+            """# Your local customizations (never touched by amplifier-dev)
+if-shell "[ -f ~/.config/amplifier-cli-tools/tmux.conf.local ]" \\
+    "source-file ~/.config/amplifier-cli-tools/tmux.conf.local"
+""",
+        )
+
+        if base_injected or local_injected:
+            print(f"Injected amplifier config into existing: {wrapper_conf}")
+        else:
+            print(f"Wrapper exists and includes amplifier config: {wrapper_conf}")
 
     return True
 
@@ -124,8 +172,8 @@ def ensure_wezterm_conf(interactive: bool = True) -> bool:
 
     Creates:
     - ~/.config/amplifier-cli-tools/wezterm.lua (base, always updated)
-    - ~/.config/amplifier-cli-tools/wezterm.lua.local (user customizations, created once)
-    - ~/.wezterm.lua (wrapper that loads both, created once)
+    - ~/.config/amplifier-cli-tools/wezterm.lua.local (empty, created once)
+    - ~/.wezterm.lua (wrapper, created if missing OR injected into existing)
 
     Args:
         interactive: If True, prompt user before creating.
@@ -145,26 +193,9 @@ def ensure_wezterm_conf(interactive: bool = True) -> bool:
     local_conf = config_dir / "wezterm.lua.local"
     wrapper_conf = Path.home() / ".wezterm.lua"
 
-    # Check if wrapper exists - if so, just update base
-    if wrapper_conf.exists():
-        # Just update base config, skip interactive prompts
-        try:
-            template_bytes = (
-                resources.files("amplifier_cli_tools")
-                .joinpath("templates", "wezterm.lua")
-                .read_bytes()
-            )
-            base_conf.write_bytes(template_bytes)
-            print(f"Updated base config: {base_conf}")
-            return True
-        except Exception as e:
-            print(f"Failed to write base WezTerm config: {e}")
-            return False
-
-    # No wrapper exists - offer to create full layered setup
-    print("WezTerm detected but no config found.")
-
-    if interactive:
+    # Check if wrapper exists and user hasn't opted in yet
+    if not wrapper_conf.exists() and interactive:
+        print("WezTerm detected but no config found.")
         response = (
             input(
                 "Create WezTerm config? (Catppuccin theme, WSL support, tmux-friendly keys) [Y/n] "
@@ -203,8 +234,10 @@ def ensure_wezterm_conf(interactive: bool = True) -> bool:
     else:
         print(f"Local config exists: {local_conf}")
 
-    # Create wrapper
-    wrapper_content = """-- Amplifier base config (updated by amplifier-dev setup)
+    # Create or inject into wrapper
+    if not wrapper_conf.exists():
+        # Create new wrapper
+        wrapper_content = """-- Amplifier base config (updated by amplifier-dev setup)
 local config = dofile(os.getenv("HOME") .. "/.config/amplifier-cli-tools/wezterm.lua")
 
 -- Merge your local customizations (never touched by amplifier-dev)
@@ -218,10 +251,36 @@ end
 
 return config
 """
-    wrapper_conf.write_text(wrapper_content)
-    print(f"Created wrapper: {wrapper_conf}")
-    print("  - Loads base config (gets updates)")
-    print("  - Merges local config (your customizations)")
+        wrapper_conf.write_text(wrapper_content)
+        print(f"Created wrapper: {wrapper_conf}")
+        print("  - Loads base config (gets updates)")
+        print("  - Merges local config (your customizations)")
+    else:
+        # Wrapper exists - inject amplifier config if not already present
+        base_injected = _inject_line_if_missing(
+            wrapper_conf,
+            "~/.config/amplifier-cli-tools/wezterm.lua",
+            """-- Amplifier base config (updated by amplifier-dev setup)
+local amplifier_config = dofile(os.getenv("HOME") .. "/.config/amplifier-cli-tools/wezterm.lua")
+
+-- Merge amplifier local customizations
+local amplifier_local_path = os.getenv("HOME") .. "/.config/amplifier-cli-tools/wezterm.lua.local"
+local ok, amplifier_local = pcall(dofile, amplifier_local_path)
+if ok and amplifier_local then
+  for k, v in pairs(amplifier_local) do
+    amplifier_config[k] = v
+  end
+end
+
+-- Start with amplifier config as base
+local config = amplifier_config
+""",
+        )
+
+        if base_injected:
+            print(f"Injected amplifier config into existing: {wrapper_conf}")
+        else:
+            print(f"Wrapper exists and includes amplifier config: {wrapper_conf}")
 
     return True
 
