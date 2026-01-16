@@ -4,6 +4,7 @@ This module handles automatic installation of dependencies and configuration
 to make the tool work out-of-the-box on fresh WSL/Ubuntu or macOS systems.
 """
 
+import platform
 from importlib import resources
 from pathlib import Path
 
@@ -182,7 +183,14 @@ def ensure_wezterm_conf(interactive: bool = True) -> bool:
         True if config created successfully, False on error.
     """
     # Check if WezTerm is installed
-    if not command_exists("wezterm"):
+    wezterm_installed = command_exists("wezterm")
+
+    # macOS-specific: Check for WezTerm.app if command not in PATH
+    if not wezterm_installed and platform.system() == "Darwin":
+        wezterm_app = Path("/Applications/WezTerm.app")
+        wezterm_installed = wezterm_app.exists()
+
+    if not wezterm_installed:
         # Not installed - skip silently
         return True
 
