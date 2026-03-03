@@ -5,16 +5,6 @@
 local wezterm = require("wezterm")
 local config = wezterm.config_builder()
 
--- Helper function to check if a font is installed
-function font_is_installed(name)
-	for _, font in ipairs(wezterm.enumerate_fonts()) do
-		if font.family == name then
-			return true
-		end
-	end
-	return false
-end
-
 -- Detect OS
 local is_windows = wezterm.target_triple:find("windows") ~= nil
 local is_mac = wezterm.target_triple:find("darwin") ~= nil
@@ -50,8 +40,8 @@ elseif is_mac then
 	-- Mac: integrated buttons in tab bar (no separate title bar)
 	config.window_decorations = "INTEGRATED_BUTTONS|RESIZE"
 elseif is_linux then
-	-- Linux: hide native title bar completely
-	config.window_decorations = "INTEGRATED_BUTTONS"
+	-- Linux: integrated buttons + resize borders, no native title bar
+	config.window_decorations = "INTEGRATED_BUTTONS|RESIZE"
 end
 
 config.window_padding = {
@@ -89,9 +79,12 @@ config.window_frame = {
 	active_titlebar_bg = "#1e1e2e",
 	inactive_titlebar_bg = "#1e1e2e",
 }
-if font_is_installed("JetBrainsMono Nerd Font") then
-	config.window_frame.font = wezterm.font("JetBrainsMono Nerd Font")
-end
+-- WezTerm handles missing fonts gracefully via fallback, so set directly
+config.window_frame.font = wezterm.font_with_fallback({
+	"JetBrainsMono Nerd Font",
+	"JetBrains Mono",
+	"Cascadia Code",
+})
 
 config.colors = {
 	tab_bar = {
