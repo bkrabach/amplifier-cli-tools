@@ -151,7 +151,7 @@ wezterm.on("format-tab-title", function(tab, tabs, panes, config, hover, max_wid
 		title = tab.active_pane.title
 		-- Remove .exe extension and path
 		title = title:gsub("%.exe$", "")
-		title = title:gsub(".*[/\]", "")
+		title = title:gsub(".*[/\\\\]", "")
 		-- Capitalize first letter
 		title = title:sub(1, 1):upper() .. title:sub(2)
 	end
@@ -225,7 +225,7 @@ config.keys = {
 					name = current:match("^(.+):%w+$") or current
 					-- If still empty, use pane title
 					if #name == 0 then
-						name = pane:get_title():gsub("%.exe$", ""):gsub(".*[/\]", "")
+						name = pane:get_title():gsub("%.exe$", ""):gsub(".*[/\\\\]", "")
 					end
 				end
 
