@@ -156,6 +156,14 @@ _TOOL_PACKAGES: dict[str, dict[str, str]] = {
         "apt": "mosh",
         "dnf": "mosh",
     },
+    "xclip": {
+        "apt": "xclip",
+        "dnf": "xclip",
+    },
+    "xsel": {
+        "apt": "xsel",
+        "dnf": "xsel",
+    },
 }
 
 
