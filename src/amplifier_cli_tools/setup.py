@@ -314,6 +314,66 @@ def ensure_local_bin_in_path() -> None:
         print('  export PATH="$HOME/.local/bin:$PATH"')
 
 
+def _try_reload_tmux() -> bool:
+    """Reload tmux config if a server is already running.
+
+    Runs `tmux source-file ~/.tmux.conf` so that live sessions pick up the
+    updated config without needing a full restart.
+
+    Returns:
+        True if reload succeeded, False if no server is running or on error.
+    """
+    import subprocess
+
+    wrapper_conf = Path.home() / ".tmux.conf"
+    result = subprocess.run(
+        ["tmux", "source-file", str(wrapper_conf)],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def ensure_clipboard_tool(interactive: bool = True) -> bool:
+    """Ensure a clipboard bridge tool is installed on Linux.
+
+    On Linux, tmux vi copy-mode uses xclip or xsel to write to the X11
+    clipboard.  Without one, yanked text only lands in tmux's internal buffer
+    (though OSC 52 still lets WezTerm paste via set-clipboard on).
+
+    This is a no-op on macOS and Windows where clipboard access works natively.
+
+    Args:
+        interactive: If True, prompt user before installing.
+
+    Returns:
+        True if a clipboard tool is available (or not needed on this OS).
+    """
+    if platform.system() != "Linux":
+        return True  # Not needed on macOS / Windows
+
+    if command_exists("xclip") or command_exists("xsel"):
+        print("Clipboard tool already installed (xclip/xsel found).")
+        return True
+
+    print("No clipboard bridge found (xclip / xsel).")
+    print("  tmux copy-mode uses this to write to the system clipboard on Linux.")
+    print("  Clipboard will still work via OSC 52 (WezTerm + allow-passthrough),")
+    print("  but having xclip gives a more reliable fallback.")
+
+    if interactive:
+        response = input("Install xclip? [Y/n] ").strip().lower()
+        if response not in ("", "y", "yes"):
+            print("Skipping xclip.")
+            return True
+
+    success = try_install_tool("xclip")
+    if not success:
+        print("Note: install manually with:  sudo apt install xclip")
+        print("      Copy-paste will still work via WezTerm OSC 52 passthrough.")
+    return success
+
+
 def run_setup(
     interactive: bool = True, skip_tools: bool = False, skip_tmux: bool = False
 ) -> bool:
@@ -352,6 +412,17 @@ def run_setup(
     if not skip_tmux:
         print("Checking tmux configuration...")
         ensure_tmux_conf()
+        # Try to hot-reload the config in any running tmux server
+        if _try_reload_tmux():
+            print("Reloaded tmux config (running sessions updated).")
+        else:
+            print("Note: restart tmux or run:  tmux source ~/.tmux.conf")
+        print()
+
+    # Clipboard bridge (Linux only - xclip/xsel for tmux copy-mode)
+    if not skip_tools:
+        print("Checking clipboard tools...")
+        ensure_clipboard_tool(interactive)
         print()
 
     # Setup WezTerm config (if WezTerm is installed)
@@ -391,6 +462,7 @@ __all__ = [
     "check_and_install_tools",
     "ensure_tmux_conf",
     "ensure_wezterm_conf",
+    "ensure_clipboard_tool",
     "quick_check",
     "REQUIRED_TOOLS",
     "OPTIONAL_TOOLS",
