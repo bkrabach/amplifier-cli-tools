@@ -20,7 +20,7 @@ amplifier-dev setup
 
 This will:
 - Check for and install required tools (git, tmux)
-- Check for and install optional tools (mosh, lazygit, mc)
+- Check for and install optional tools (mosh, lazygit, yazi)
 - Create a minimal `~/.tmux.conf` if you don't have one (with mouse support, keybindings, etc.)
 - Create a `~/.wezterm.lua` if WezTerm is installed but not configured
 
@@ -67,7 +67,7 @@ amplifier-dev -d ~/work/my-feature
   - `amplifier` - Amplifier CLI
   - `shell` - Two shell panes
   - `git` - lazygit
-  - `files` - mc (midnight commander)
+  - `files` - yazi (file manager)
 
 #### Setup Subcommand
 
@@ -144,7 +144,7 @@ agents_template = ""
 [dev.windows]
 shell = ""           # Two panes, just shell
 git = "lazygit"
-files = "mc"
+files = "yazi"
 ```
 
 ## Requirements
@@ -159,7 +159,7 @@ Run `amplifier-dev setup` to automatically install missing tools.
 **Optional tools (installed by `amplifier-dev setup`):**
 - mosh - for resilient remote connections (recommended for mobile/remote dev)
 - lazygit - for git window
-- mc (midnight commander) - for files window
+- yazi - for files window
 
 ## Platform Support
 

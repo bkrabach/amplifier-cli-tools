@@ -20,7 +20,7 @@ agents_template = ""  # Path to custom template, empty = use built-in
 [dev.windows]
 shell = ""        # Empty = shell only (no command)
 git = "lazygit"
-files = "mc"
+files = "yazi"
 ```
 
 Usage
@@ -124,7 +124,7 @@ def _get_hardcoded_fallback() -> Config:
             windows=[
                 WindowConfig(name="shell", command=""),
                 WindowConfig(name="git", command="lazygit"),
-                WindowConfig(name="files", command="mc"),
+                WindowConfig(name="files", command="yazi"),
             ],
         ),
     )

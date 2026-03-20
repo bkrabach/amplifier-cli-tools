@@ -13,7 +13,7 @@ from .shell import command_exists, try_install_tool
 
 # Tools required for full functionality
 REQUIRED_TOOLS = ["git", "tmux"]
-OPTIONAL_TOOLS = ["mosh", "lazygit", "mc"]
+OPTIONAL_TOOLS = ["mosh", "lazygit", "yazi"]
 
 
 def check_and_install_tools(interactive: bool = True) -> dict[str, bool]:

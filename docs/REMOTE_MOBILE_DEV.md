@@ -14,7 +14,7 @@ Work on Amplifier projects from anywhere - your laptop, tablet, or phone - witho
 │   │  ├── amplifier (AI agent running)                       │   │
 │   │  ├── shell (two panes)                                  │   │
 │   │  ├── git (lazygit)                                      │   │
-│   │  └── files (mc)                                         │   │
+│   │  └── files (yazi)                                       │   │
 │   └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
          ▲           ▲           ▲           ▲

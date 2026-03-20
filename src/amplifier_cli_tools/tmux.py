@@ -369,7 +369,7 @@ def _extract_tool_name(command: str) -> str | None:
     """Extract the primary tool name from a command string.
 
     Args:
-        command: Command string (e.g., "lazygit", "mc -b").
+        command: Command string (e.g., "lazygit", "yazi").
 
     Returns:
         Tool name or None if command is empty.
@@ -394,7 +394,7 @@ def _get_install_instruction(tool_name: str) -> str:
     # Common tools and their install commands
     install_commands = {
         "lazygit": "brew install lazygit",
-        "mc": "brew install midnight-commander",
+        "yazi": "brew install yazi",
         "htop": "brew install htop",
         "btop": "brew install btop",
         "nvim": "brew install neovim",

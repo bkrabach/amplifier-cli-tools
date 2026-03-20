@@ -28,4 +28,4 @@ bundle = "amplifier-dev"
 [dev.windows]
 shell = ""           # Two panes, just shell
 git = "lazygit"      # lazygit for git operations
-files = "mc"         # midnight commander for file browsing
+files = "yazi"       # yazi for file browsing

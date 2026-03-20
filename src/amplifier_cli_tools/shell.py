@@ -135,10 +135,9 @@ _TOOL_PACKAGES: dict[str, dict[str, str]] = {
         "winget": "JesseDuffield.lazygit",
         # Linux uses GitHub releases - see _install_lazygit_linux()
     },
-    "mc": {
-        "brew": "mc",
-        "apt": "mc",
-        "dnf": "mc",
+    "yazi": {
+        "brew": "yazi",
+        # Linux: cargo install yazi-fm yazi-cli, or download from GitHub releases
     },
     "tmux": {
         "brew": "tmux",
