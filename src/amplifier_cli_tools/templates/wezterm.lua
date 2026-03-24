@@ -295,8 +295,7 @@ config.keys = {
 	{ key = "d", mods = mod_key, action = wezterm.action.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
 	{ key = "d", mods = mod_key .. "|SHIFT", action = wezterm.action.SplitVertical({ domain = "CurrentPaneDomain" }) },
 
-	-- Clear scrollback
-	{ key = "k", mods = mod_key, action = wezterm.action.ClearScrollback("ScrollbackAndViewport") },
+	-- Clear scrollback (Ctrl+Shift+K only — Ctrl+K is used by nano, readline, etc.)
 	{ key = "k", mods = "CTRL|SHIFT", action = wezterm.action.ClearScrollback("ScrollbackAndViewport") },
 
 	-- WSL/Ubuntu (Windows only, Alt+Shift+U - Ctrl+Shift+U is reserved for emoji picker)
