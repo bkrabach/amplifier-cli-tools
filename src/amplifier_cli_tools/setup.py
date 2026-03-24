@@ -300,6 +300,62 @@ local config = amplifier_config
     return True
 
 
+def ensure_yazi_conf() -> bool:
+    """Create yazi config with good defaults if none exists.
+
+    Creates:
+    - ~/.config/amplifier-cli-tools/yazi.toml (reference, always updated)
+    - ~/.config/yazi/yazi.toml (active config, created only if missing)
+
+    Unlike tmux/WezTerm, TOML has no include/source mechanism, so we can't
+    layer configs at runtime. Instead: create if missing, never overwrite,
+    and keep a reference copy the user can diff for updated recommendations.
+
+    Returns:
+        True if config created successfully, False on error.
+    """
+    # Check if yazi is installed
+    if not command_exists("yazi"):
+        # Not installed - skip silently
+        return True
+
+    config_dir = Path.home() / ".config" / "amplifier-cli-tools"
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    yazi_dir = Path.home() / ".config" / "yazi"
+    yazi_dir.mkdir(parents=True, exist_ok=True)
+
+    ref_conf = config_dir / "yazi.toml"
+    active_conf = yazi_dir / "yazi.toml"
+
+    # Always update reference config (gets updates from amplifier-cli-tools)
+    try:
+        template_bytes = (
+            resources.files("amplifier_cli_tools")
+            .joinpath("templates", "yazi.toml")
+            .read_bytes()
+        )
+        ref_conf.write_bytes(template_bytes)
+        print(f"Updated reference config: {ref_conf}")
+    except Exception as e:
+        print(f"Failed to write reference yazi config: {e}")
+        return False
+
+    # Create active config only if missing (never overwrite user's config)
+    if not active_conf.exists():
+        try:
+            active_conf.write_bytes(template_bytes)
+            print(f"Created yazi config: {active_conf}")
+        except Exception as e:
+            print(f"Failed to write yazi config: {e}")
+            return False
+    else:
+        print(f"Yazi config exists: {active_conf}")
+        print(f"  Updated recommendations: {ref_conf}")
+
+    return True
+
+
 def ensure_local_bin_in_path() -> None:
     """Check if ~/.local/bin is in PATH and warn if not."""
     local_bin = Path.home() / ".local" / "bin"
@@ -315,7 +371,10 @@ def ensure_local_bin_in_path() -> None:
 
 
 def run_setup(
-    interactive: bool = True, skip_tools: bool = False, skip_tmux: bool = False
+    interactive: bool = True,
+    skip_tools: bool = False,
+    skip_tmux: bool = False,
+    skip_yazi: bool = False,
 ) -> bool:
     """Run full first-time setup.
 
@@ -323,6 +382,7 @@ def run_setup(
         interactive: If True, prompt for confirmations.
         skip_tools: If True, skip tool installation.
         skip_tmux: If True, skip tmux.conf creation.
+        skip_yazi: If True, skip yazi.toml creation.
 
     Returns:
         True if setup completed successfully.
@@ -359,6 +419,12 @@ def run_setup(
     ensure_wezterm_conf(interactive)
     print()
 
+    # Setup yazi config (if yazi is installed)
+    if not skip_yazi:
+        print("Checking yazi configuration...")
+        ensure_yazi_conf()
+        print()
+
     # PATH check
     ensure_local_bin_in_path()
 
@@ -391,6 +457,7 @@ __all__ = [
     "check_and_install_tools",
     "ensure_tmux_conf",
     "ensure_wezterm_conf",
+    "ensure_yazi_conf",
     "quick_check",
     "REQUIRED_TOOLS",
     "OPTIONAL_TOOLS",

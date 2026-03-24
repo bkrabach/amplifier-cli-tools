@@ -1,0 +1,19 @@
+# Amplifier-recommended yazi configuration
+# Reference: https://yazi-rs.github.io/docs/configuration/yazi/
+#
+# Only non-default values are listed here. Yazi uses sensible built-in
+# defaults for anything not specified — you don't need a full config file.
+#
+# Created by `amplifier-dev setup` when no yazi.toml existed.
+# After creation, this file is yours — amplifier-dev will never overwrite it.
+# Check ~/.config/amplifier-cli-tools/yazi.toml for updated recommendations.
+
+[mgr]
+show_hidden = true      # Show dotfiles (essential for dev workflows)
+linemode = "size"       # Show file sizes in the file list
+sort_by = "natural"     # Natural sorting: 1, 2, 10 (not 1, 10, 2)
+scrolloff = 5           # Keep 5 lines visible above/below cursor
+
+[preview]
+wrap = "yes"            # Word wrap in preview pane (easier to read long lines)
+tab_size = 2            # Tab width in preview

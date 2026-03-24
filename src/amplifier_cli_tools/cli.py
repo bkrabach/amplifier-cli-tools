@@ -106,6 +106,7 @@ def _cmd_setup(args: argparse.Namespace) -> int:
             interactive=not args.yes,
             skip_tools=args.skip_tools,
             skip_tmux=args.skip_tmux,
+            skip_yazi=args.skip_yazi,
         )
         return 0 if success else 1
 
@@ -275,6 +276,11 @@ def _main_dev_subcommands() -> int:
         "--skip-tmux",
         action="store_true",
         help="Skip tmux.conf creation",
+    )
+    setup_parser.add_argument(
+        "--skip-yazi",
+        action="store_true",
+        help="Skip yazi.toml creation",
     )
 
     # Config subcommand

@@ -126,11 +126,39 @@ local tab_colors = {
 	teal = { active_bg = "#94e2d5", inactive_bg = "#406660", fg = "#1e1e2e", inactive_fg = "#cdd6f4" },
 }
 
+-- Bell notification: track panes that ring the bell for tab highlighting.
+-- Any CLI app can trigger this with: printf '\a' (or \x07 BEL character).
+-- In Python: print("\a", end="", flush=True)
+-- In tmux: bells propagate to WezTerm automatically (monitor-bell is on by default).
+local bell_panes = {}
+
+wezterm.on("bell", function(window, pane)
+	bell_panes[tostring(pane:pane_id())] = true
+end)
+
 -- Clean tab titles (just "PowerShell" not "powershell.exe")
 -- Supports "name:color" format (e.g., "Server:blue", "Dev:red")
 wezterm.on("format-tab-title", function(tab, tabs, panes, config, hover, max_width)
 	local title = tab.tab_title
 	local color = nil
+
+	-- Clear bell state when tab becomes active (user has seen it)
+	if tab.is_active then
+		for _, p in ipairs(tab.panes) do
+			bell_panes[tostring(p.pane_id)] = nil
+		end
+	end
+
+	-- Check if any pane in this tab has an unacknowledged bell
+	local has_bell = false
+	if not tab.is_active then
+		for _, p in ipairs(tab.panes) do
+			if bell_panes[tostring(p.pane_id)] then
+				has_bell = true
+				break
+			end
+		end
+	end
 
 	if title and #title > 0 then
 		-- Check for "name:color" format
@@ -150,6 +178,17 @@ wezterm.on("format-tab-title", function(tab, tabs, panes, config, hover, max_wid
 
 	-- Add padding
 	title = "  " .. title .. "  "
+
+	-- Bell indicator on inactive tabs: yellow attention highlight
+	if has_bell then
+		local bell = tab_colors.yellow
+		return {
+			{ Background = { Color = bell.active_bg } },
+			{ Foreground = { Color = bell.fg } },
+			{ Attribute = { Intensity = "Bold" } },
+			{ Text = " ● " .. title },
+		}
+	end
 
 	-- Return with color if specified (bright when active, dimmed when inactive)
 	if color then
