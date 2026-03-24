@@ -134,6 +134,8 @@ local bell_panes = {}
 
 wezterm.on("bell", function(window, pane)
 	bell_panes[tostring(pane:pane_id())] = true
+	-- Force tab bar to re-render so the yellow highlight appears immediately
+	window:invalidate()
 end)
 
 -- Clean tab titles (just "PowerShell" not "powershell.exe")
