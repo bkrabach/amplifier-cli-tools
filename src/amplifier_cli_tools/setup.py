@@ -93,6 +93,55 @@ def _inject_line_if_missing(
     return True
 
 
+def _is_wsl() -> bool:
+    """Detect if running inside Windows Subsystem for Linux."""
+    try:
+        return "microsoft" in Path("/proc/version").read_text().lower()
+    except (FileNotFoundError, PermissionError):
+        return False
+
+
+def _get_windows_home() -> Path | None:
+    """Get the Windows user's home directory from WSL.
+
+    Tries cmd.exe + wslpath first (most reliable), falls back to /mnt/c/Users/$USER.
+    """
+    import os
+    import subprocess
+
+    # Try cmd.exe to get %USERPROFILE%, convert to WSL path
+    try:
+        cmd_result = subprocess.run(
+            ["cmd.exe", "/c", "echo", "%USERPROFILE%"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if cmd_result.returncode == 0:
+            win_path = cmd_result.stdout.strip()
+            wsl_result = subprocess.run(
+                ["wslpath", "-u", win_path],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if wsl_result.returncode == 0:
+                path = Path(wsl_result.stdout.strip())
+                if path.is_dir():
+                    return path
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # Fallback: check /mnt/c/Users/$USER
+    user = os.environ.get("USER", "")
+    if user:
+        path = Path(f"/mnt/c/Users/{user}")
+        if path.is_dir():
+            return path
+
+    return None
+
+
 def ensure_tmux_conf() -> bool:
     """Create layered tmux config structure.
 
@@ -178,9 +227,13 @@ def ensure_wezterm_conf(interactive: bool = True) -> bool:
     """Create layered WezTerm config structure.
 
     Creates:
-    - ~/.config/amplifier-cli-tools/wezterm.lua (base, always updated)
-    - ~/.config/amplifier-cli-tools/wezterm.lua.local (empty, created once)
-    - ~/.wezterm.lua (wrapper, created if missing OR injected into existing)
+    - <home>/.config/amplifier-cli-tools/wezterm.lua (base, always updated)
+    - <home>/.config/amplifier-cli-tools/wezterm.lua.local (empty, created once)
+    - <home>/.wezterm.lua (wrapper, created if missing OR injected into existing)
+
+    Where <home> is the Windows user home when running in WSL (since WezTerm
+    runs on Windows and reads config from the Windows filesystem), or the
+    Unix home directory otherwise.
 
     Args:
         interactive: If True, prompt user before creating.
@@ -196,16 +249,36 @@ def ensure_wezterm_conf(interactive: bool = True) -> bool:
         wezterm_app = Path("/Applications/WezTerm.app")
         wezterm_installed = wezterm_app.exists()
 
+    # WSL-specific: WezTerm runs on Windows, config must go to Windows home
+    win_home = None
+    if not wezterm_installed and _is_wsl():
+        win_home = _get_windows_home()
+        if win_home:
+            # Detect WezTerm: existing config or installed binary
+            if (win_home / ".wezterm.lua").exists():
+                wezterm_installed = True
+            else:
+                for wezterm_path in [
+                    Path("/mnt/c/Program Files/WezTerm/wezterm-gui.exe"),
+                    win_home / "scoop" / "apps" / "wezterm" / "current" / "wezterm-gui.exe",
+                    win_home / "AppData" / "Local" / "Programs" / "WezTerm" / "wezterm-gui.exe",
+                ]:
+                    if wezterm_path.exists():
+                        wezterm_installed = True
+                        break
+
     if not wezterm_installed:
         # Not installed - skip silently
         return True
 
-    config_dir = Path.home() / ".config" / "amplifier-cli-tools"
+    # Deploy to Windows home when running in WSL, otherwise to Unix home
+    home = win_home if win_home else Path.home()
+    config_dir = home / ".config" / "amplifier-cli-tools"
     config_dir.mkdir(parents=True, exist_ok=True)
 
     base_conf = config_dir / "wezterm.lua"
     local_conf = config_dir / "wezterm.lua.local"
-    wrapper_conf = Path.home() / ".wezterm.lua"
+    wrapper_conf = home / ".wezterm.lua"
 
     # Check if wrapper exists and user hasn't opted in yet
     if not wrapper_conf.exists() and interactive:
@@ -251,11 +324,12 @@ def ensure_wezterm_conf(interactive: bool = True) -> bool:
     # Create or inject into wrapper
     if not wrapper_conf.exists():
         # Create new wrapper
-        wrapper_content = """-- Amplifier base config (updated by amplifier-dev setup)
-local config = dofile(os.getenv("HOME") .. "/.config/amplifier-cli-tools/wezterm.lua")
+        wrapper_content = """local wezterm = require('wezterm')
+-- Amplifier base config (updated by amplifier-dev setup)
+local config = dofile(wezterm.home_dir .. "/.config/amplifier-cli-tools/wezterm.lua")
 
 -- Merge your local customizations (never touched by amplifier-dev)
-local local_config_path = os.getenv("HOME") .. "/.config/amplifier-cli-tools/wezterm.lua.local"
+local local_config_path = wezterm.home_dir .. "/.config/amplifier-cli-tools/wezterm.lua.local"
 local ok, local_config = pcall(dofile, local_config_path)
 if ok and local_config then
   for k, v in pairs(local_config) do
@@ -273,12 +347,12 @@ return config
         # Wrapper exists - inject amplifier config if not already present
         base_injected = _inject_line_if_missing(
             wrapper_conf,
-            "~/.config/amplifier-cli-tools/wezterm.lua",
+            "amplifier-cli-tools/wezterm.lua",
             """-- Amplifier base config (updated by amplifier-dev setup)
-local amplifier_config = dofile(os.getenv("HOME") .. "/.config/amplifier-cli-tools/wezterm.lua")
+local amplifier_config = dofile(wezterm.home_dir .. "/.config/amplifier-cli-tools/wezterm.lua")
 
 -- Merge amplifier local customizations
-local amplifier_local_path = os.getenv("HOME") .. "/.config/amplifier-cli-tools/wezterm.lua.local"
+local amplifier_local_path = wezterm.home_dir .. "/.config/amplifier-cli-tools/wezterm.lua.local"
 local ok, amplifier_local = pcall(dofile, amplifier_local_path)
 if ok and amplifier_local then
   for k, v in pairs(amplifier_local) do
